@@ -44,7 +44,7 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="mb-12">
             <Link to="/" className="inline-block group">
-              <PlaceholderLogo size={32} className="text-white group-hover:text-gray-400 transition-colors" />
+              <PlaceholderLogo size={48} className="group-hover:opacity-80 transition-opacity" />
             </Link>
             <h1 className="text-3xl font-thin text-white mt-8 mb-2 uppercase tracking-tight">Welcome <span className="font-medium">Back</span></h1>
             <p className="text-sm text-gray-400 font-light">Sign in to your Pandora Labs account</p>

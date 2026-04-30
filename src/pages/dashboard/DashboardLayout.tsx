@@ -18,7 +18,7 @@ export default function DashboardLayout() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#050505]">
         <div className="text-center">
-          <PlaceholderLogo size={40} className="mx-auto mb-4 text-white animate-pulse" />
+          <PlaceholderLogo size={56} className="mx-auto mb-4 animate-pulse" />
           <p className="text-sm text-gray-500 animate-pulse font-light">Loading Pandora...</p>
         </div>
       </div>

@@ -53,7 +53,7 @@ export default function SignUpPage() {
           {/* Logo */}
           <div className="mb-10">
             <Link to="/" className="inline-block group">
-              <PlaceholderLogo size={32} className="text-white group-hover:text-gray-400 transition-colors" />
+              <PlaceholderLogo size={48} className="group-hover:opacity-80 transition-opacity" />
             </Link>
             <h1 className="text-3xl font-thin text-white mt-8 mb-2 uppercase tracking-tight">Create <span className="font-medium">Account</span></h1>
             <p className="text-sm text-gray-400 font-light">Join Pandora Labs and automate your ops</p>

@@ -49,7 +49,7 @@ export function Sidebar() {
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 py-5 border-b border-white/5">
-          <PlaceholderLogo size={24} className="text-white shrink-0" />
+          <PlaceholderLogo size={36} className="text-white shrink-0" />
           <AnimatePresence>
             {!collapsed && (
               <motion.span

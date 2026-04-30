@@ -5,7 +5,7 @@ import { Button, ParticleField } from '@/components/ui';
 
 export function HeroSection() {
   return (
-    <section className="relative min-h-screen flex items-center overflow-hidden pt-24 pb-16 px-4 bg-[#050505]">
+    <section className="relative min-h-screen flex items-center overflow-hidden py-16 px-4 bg-[#050505]">
       {/* Background effects */}
       <ParticleField particleCount={20} />
 
