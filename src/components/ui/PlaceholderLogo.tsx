@@ -1,7 +1,7 @@
 /**
- * PlaceholderLogo Component
+ * PandoraLogo Component
  * ──────────────────────────
- * A clean, abstract tech symbol to serve as the logo placeholder.
+ * Renders the actual Pandora Labs "P" logo from the brand asset.
  */
 
 interface PlaceholderLogoProps {
@@ -11,22 +11,14 @@ interface PlaceholderLogoProps {
 
 export function PlaceholderLogo({ className = '', size = 32 }: PlaceholderLogoProps) {
   return (
-    <svg
+    <img
+      src="/pandora-logo.png"
+      alt="Pandora Labs"
       width={size}
       height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
       className={className}
-    >
-      <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2" />
-      <circle cx="16" cy="16" r="6" fill="currentColor" />
-      <path
-        d="M16 2L16 8M16 24L16 30M2 16L8 16M24 16L30 16"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
+      style={{ objectFit: 'contain' }}
+      draggable={false}
+    />
   );
 }
