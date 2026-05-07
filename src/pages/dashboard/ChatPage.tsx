@@ -139,6 +139,25 @@ export default function ChatPage() {
       };
 
       setMessages(prev => [...prev, agentMessage]);
+
+      // Play TTS for the agent's response
+      try {
+        const ttsResponse = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: data.reply })
+        });
+        
+        if (ttsResponse.ok) {
+          const blob = await ttsResponse.blob();
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.onended = () => URL.revokeObjectURL(url);
+          audio.play().catch(e => console.warn('Audio auto-play blocked by browser:', e));
+        }
+      } catch (e) {
+        console.error('Failed to play TTS for agent response:', e);
+      }
     } catch (error) {
       console.error('Chat error:', error);
       setMessages(prev => [...prev, {

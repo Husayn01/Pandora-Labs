@@ -223,7 +223,7 @@ export function VoiceInput({ onTranscript, onProgress, className = '', autoSendD
   /* ─────────────────────────────────────────────
      Voice Mode Toggle
      ───────────────────────────────────────────── */
-  const toggleListening = useCallback(() => {
+  const toggleListening = useCallback(async () => {
     if (isListening) {
       // Turn OFF
       setIsListening(false);
@@ -237,23 +237,40 @@ export function VoiceInput({ onTranscript, onProgress, className = '', autoSendD
       playSound('on');
       setIsSpeakingWelcome(true);
       
-      // Speak welcome message first
-      const msg = new SpeechSynthesisUtterance("Hi, I'm Pandora. How can I help you today?");
-      msg.lang = 'en-US'; // always greet in English for now
-      msg.rate = 1.1;
-      
-      msg.onend = () => {
-        setIsSpeakingWelcome(false);
-        startListeningCore();
-      };
-      
-      msg.onerror = () => {
-        // Fallback if synthesis fails
-        setIsSpeakingWelcome(false);
-        startListeningCore();
-      };
-      
-      window.speechSynthesis.speak(msg);
+      try {
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: "Hi, I'm Pandora. How can I help you today?" })
+        });
+        
+        if (!response.ok) throw new Error('TTS failed');
+        
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        
+        audio.onended = () => {
+          setIsSpeakingWelcome(false);
+          startListeningCore();
+          URL.revokeObjectURL(url);
+        };
+        
+        audio.onerror = () => {
+          setIsSpeakingWelcome(false);
+          startListeningCore();
+        };
+        
+        audio.play();
+      } catch (error) {
+        console.error('ElevenLabs TTS error, falling back to browser TTS:', error);
+        // Fallback to browser TTS
+        const msg = new SpeechSynthesisUtterance("Hi, I'm Pandora. How can I help you today?");
+        msg.lang = 'en-US';
+        msg.onend = () => { setIsSpeakingWelcome(false); startListeningCore(); };
+        msg.onerror = () => { setIsSpeakingWelcome(false); startListeningCore(); };
+        window.speechSynthesis.speak(msg);
+      }
     }
   }, [isListening, startListeningCore, stopAudioVisualization, commitAndSend]);
 
@@ -274,23 +291,31 @@ export function VoiceInput({ onTranscript, onProgress, className = '', autoSendD
     <div className={`relative flex flex-col items-center ${className}`}>
       {/* Dynamic Orb / Main Button */}
       <div className="relative group cursor-pointer" onClick={toggleListening}>
-        {/* Glow behind orb */}
+        {/* Deep background glow */}
         {isListening && (
           <motion.div
-            className="absolute inset-0 rounded-full bg-pandora-500/20 blur-xl pointer-events-none"
-            animate={{ scale: 1 + audioLevel * 1.5, opacity: 0.5 + audioLevel * 0.5 }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.1 }}
+            className="absolute inset-0 rounded-full bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 blur-2xl pointer-events-none"
+            animate={{ 
+              scale: 1 + audioLevel * 2, 
+              opacity: 0.4 + audioLevel * 0.4,
+              rotate: 360
+            }}
+            transition={{ 
+              scale: { type: 'spring', bounce: 0, duration: 0.1 },
+              opacity: { duration: 0.1 },
+              rotate: { duration: 10, repeat: Infinity, ease: 'linear' }
+            }}
           />
         )}
         
         <motion.div
-          className={`relative z-10 w-14 h-14 rounded-full flex items-center justify-center transition-colors duration-500 overflow-hidden ${
-            isListening ? 'bg-gradient-to-br from-pandora-400 to-pandora-600 shadow-[0_0_30px_rgba(139,92,246,0.3)]' 
+          className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 overflow-hidden ${
+            isListening ? 'shadow-[0_0_40px_rgba(168,85,247,0.5)] bg-black' 
             : isSpeakingWelcome ? 'bg-white text-black' 
-            : 'bg-[#111] border border-white/10 hover:bg-[#1a1a1a]'
+            : 'bg-[#111] border border-white/10 hover:bg-[#1a1a1a] shadow-lg'
           }`}
-          animate={isListening ? { scale: 1 + (audioLevel * 0.2) } : { scale: 1 }}
-          transition={{ type: 'spring', bounce: 0, duration: 0.1 }}
+          animate={isListening ? { scale: 1 + (audioLevel * 0.15) } : { scale: 1 }}
+          transition={{ type: 'spring', bounce: 0.4, duration: 0.3 }}
         >
           {isSpeakingWelcome ? (
             <motion.div 
@@ -299,18 +324,27 @@ export function VoiceInput({ onTranscript, onProgress, className = '', autoSendD
               className="w-full h-full rounded-full border-2 border-transparent border-t-black/50 border-r-black/50"
             />
           ) : isListening ? (
-            <div className="flex gap-1">
-              {[0, 1, 2].map(i => (
-                <motion.div
-                  key={i}
-                  className="w-1.5 bg-white rounded-full"
-                  animate={{ height: [6, 6 + (audioLevel * 20), 6] }}
-                  transition={{ duration: 0.3, repeat: Infinity, delay: i * 0.1 }}
-                />
-              ))}
+            <div className="absolute inset-0 flex items-center justify-center">
+              {/* Complex Orb Inner Layers */}
+              <motion.div 
+                className="absolute inset-0 opacity-80 mix-blend-screen"
+                animate={{ rotate: -360 }}
+                transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                style={{ background: 'conic-gradient(from 0deg, transparent 0%, rgba(168,85,247,0.8) 25%, transparent 50%, rgba(6,182,212,0.8) 75%, transparent 100%)' }}
+              />
+              <motion.div 
+                className="absolute inset-1 rounded-full bg-gradient-to-tr from-pink-500 to-cyan-500 mix-blend-overlay"
+                animate={{ scale: [0.9, 1 + audioLevel * 0.5, 0.9], opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 0.1 }}
+              />
+              <motion.div 
+                className="absolute inset-3 rounded-full bg-white blur-[2px]"
+                animate={{ scale: [0.8, 1 + audioLevel * 0.8, 0.8] }}
+                transition={{ duration: 0.1 }}
+              />
             </div>
           ) : (
-            <Mic size={20} className="text-gray-400 group-hover:text-white transition-colors" />
+            <Mic size={22} className="text-gray-400 group-hover:text-white transition-colors" />
           )}
         </motion.div>
         
