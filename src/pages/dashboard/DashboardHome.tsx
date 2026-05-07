@@ -196,17 +196,19 @@ export default function DashboardHome() {
               </div>
             </Link>
 
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-[#111] border border-white/5 hover:border-white/20 hover:bg-[#151515] transition-all duration-200 group cursor-pointer">
-              <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                <Mic size={18} className="text-white" />
+            <Link to="/dashboard/chat">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-[#111] border border-white/5 hover:border-white/20 hover:bg-[#151515] transition-all duration-200 group cursor-pointer h-full">
+                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                  <Mic size={18} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white group-hover:text-gray-300 transition-colors">
+                    Talk to Pandora
+                  </p>
+                  <p className="text-xs text-gray-500 font-light mt-0.5">Voice command via chat</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-white group-hover:text-gray-300 transition-colors">
-                  Talk to Pandora
-                </p>
-                <p className="text-xs text-gray-500 font-light mt-0.5">Voice command via chat</p>
-              </div>
-            </div>
+            </Link>
           </div>
         </GlassCard>
       </motion.div>

@@ -476,7 +476,23 @@ function InstallWizardModal({
                       <p className="text-[10px] text-gray-500">OAuth connection</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => alert('OAuth flow coming in next phase')}>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      if (!user) return;
+                      let endpoint = '';
+                      if (connector === 'google_calendar') endpoint = '/api/connectors/google-calendar';
+                      else if (connector === 'gmail') endpoint = '/api/connectors/gmail';
+                      else if (connector === 'notion') endpoint = '/api/connectors/notion';
+                      
+                      if (endpoint) {
+                        window.location.href = `${endpoint}?action=authorize&userId=${user.id}`;
+                      } else {
+                        alert(`Connector for ${connector} not implemented yet`);
+                      }
+                    }}
+                  >
                     Connect
                   </Button>
                 </div>

@@ -17,6 +17,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
@@ -24,6 +25,7 @@ import { PlaceholderLogo } from '@/components/ui';
 
 const navItems = [
   { icon: Home, label: 'Home', path: '/dashboard' },
+  { icon: MessageSquare, label: 'Chat', path: '/dashboard/chat' },
   { icon: Bot, label: 'My Agents', path: '/dashboard/agents' },
   { icon: Store, label: 'Agent Store', path: '/dashboard/store' },
   { icon: Activity, label: 'Operations', path: '/dashboard/operations' },

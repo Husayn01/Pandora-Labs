@@ -19,6 +19,7 @@ import DashboardLayout from '@/pages/dashboard/DashboardLayout';
 import DashboardHome from '@/pages/dashboard/DashboardHome';
 import MyAgentsPage from '@/pages/dashboard/MyAgentsPage';
 import AgentStorePage from '@/pages/dashboard/AgentStorePage';
+import ChatPage from '@/pages/dashboard/ChatPage';
 import OperationsPage from '@/pages/dashboard/OperationsPage';
 import InsightsPage from '@/pages/dashboard/InsightsPage';
 import SettingsPage from '@/pages/dashboard/SettingsPage';
@@ -39,6 +40,7 @@ export default function App() {
             <Route index element={<DashboardHome />} />
             <Route path="agents" element={<MyAgentsPage />} />
             <Route path="store" element={<AgentStorePage />} />
+            <Route path="chat" element={<ChatPage />} />
             <Route path="operations" element={<OperationsPage />} />
             <Route path="insights" element={<InsightsPage />} />
             <Route path="settings" element={<SettingsPage />} />
