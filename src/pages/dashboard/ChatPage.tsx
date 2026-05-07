@@ -287,9 +287,11 @@ export default function ChatPage() {
         </div>
 
         {/* Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent">
-          <div className="max-w-3xl mx-auto relative">
-            <div className="absolute -top-12 left-0 right-0 flex justify-center pointer-events-none">
+        <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent pointer-events-none">
+          <div className="max-w-3xl mx-auto relative pointer-events-auto">
+            
+            {/* Status indicator */}
+            <div className="absolute -top-16 left-0 right-0 flex justify-center pointer-events-none">
               {progressStatus && (
                 <div className="px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-xs font-medium text-white shadow-xl backdrop-blur-md flex items-center gap-2">
                   <Loader2 size={12} className="animate-spin" />
@@ -297,8 +299,18 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
+
+            {/* Voice Orb - Centered prominently */}
+            <div className="flex justify-center mb-4 relative z-20">
+              <VoiceInput 
+                onTranscript={handleSendMessage} 
+                onProgress={(status) => setProgressStatus(status)}
+                autoSendDelay={2000}
+              />
+            </div>
             
-            <div className="relative flex items-center bg-[#111] border border-white/10 rounded-2xl p-2 pl-4 focus-within:border-white/30 transition-colors shadow-2xl">
+            {/* Text Input Fallback */}
+            <div className="relative flex items-center bg-[#111] border border-white/10 rounded-2xl p-2 pl-4 focus-within:border-white/30 transition-colors shadow-2xl z-10">
               <input
                 type="text"
                 value={inputText}
@@ -309,24 +321,18 @@ export default function ChatPage() {
                     handleSendMessage(inputText);
                   }
                 }}
-                placeholder="Ask Pandora to do something..."
+                placeholder="Or type a message to Pandora..."
                 className="flex-1 bg-transparent text-white text-sm placeholder-gray-500 focus:outline-none font-light"
                 disabled={isProcessing}
               />
               
-              <div className="flex items-center gap-2 ml-2">
-                <VoiceInput 
-                  onTranscript={handleSendMessage} 
-                  onProgress={(status) => setProgressStatus(status)}
-                />
-                <button
-                  onClick={() => handleSendMessage(inputText)}
-                  disabled={!inputText.trim() || isProcessing}
-                  className="w-10 h-10 rounded-xl bg-white text-black flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors cursor-pointer shrink-0"
-                >
-                  <Send size={16} />
-                </button>
-              </div>
+              <button
+                onClick={() => handleSendMessage(inputText)}
+                disabled={!inputText.trim() || isProcessing}
+                className="w-10 h-10 ml-2 rounded-xl bg-white text-black flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors cursor-pointer shrink-0"
+              >
+                <Send size={16} />
+              </button>
             </div>
             
             <div className="text-center mt-3 flex items-center justify-center gap-1.5 text-[10px] text-gray-500 font-light">

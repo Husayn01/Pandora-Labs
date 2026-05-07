@@ -1,19 +1,20 @@
 /**
  * Voice Input Component
  * ──────────────────────
- * Live voice transcription with visual feedback.
- * Uses Web Speech API for English, with Gemini fallback for Hausa/Igbo/Yoruba.
- * Shows real-time transcription progress and animated orb.
+ * Live voice transcription with visual feedback (Dynamic Orb).
+ * Uses Web Speech API for continuous listening, auto-sends on pause.
+ * Includes AudioContext sound effects and SpeechSynthesis welcome.
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Globe, Loader2, X, Send } from 'lucide-react';
+import { X, Mic, Loader2 } from 'lucide-react';
 
 interface VoiceInputProps {
   onTranscript: (text: string) => void;
   onProgress?: (status: string) => void;
   className?: string;
+  autoSendDelay?: number; // ms of silence before auto-sending
 }
 
 type SupportedLang = 'en-US' | 'ha-NG' | 'ig-NG' | 'yo-NG';
@@ -25,7 +26,7 @@ const LANGUAGES: { code: SupportedLang; name: string; flag: string }[] = [
   { code: 'yo-NG', name: 'Yoruba', flag: '🇳🇬' },
 ];
 
-export function VoiceInput({ onTranscript, onProgress, className = '' }: VoiceInputProps) {
+export function VoiceInput({ onTranscript, onProgress, className = '', autoSendDelay = 2000 }: VoiceInputProps) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interimText, setInterimText] = useState('');
@@ -33,15 +34,62 @@ export function VoiceInput({ onTranscript, onProgress, className = '' }: VoiceIn
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [error, setError] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
+  const [isSpeakingWelcome, setIsSpeakingWelcome] = useState(false);
 
   const recognitionRef = useRef<any>(null);
   const analyzerRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // To track the current accumulated text in a mutable ref so the timeout callback sees it
+  const currentTextRef = useRef('');
 
   // Check if Web Speech API is available
   const hasWebSpeech = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 
+  /* ─────────────────────────────────────────────
+     Sound Effects
+     ───────────────────────────────────────────── */
+  const playSound = (type: 'on' | 'off') => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.type = 'sine';
+      
+      const now = ctx.currentTime;
+      if (type === 'on') {
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      } else {
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(440, now + 0.15);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      }
+    } catch (e) {
+      console.warn('Audio feedback failed:', e);
+    }
+  };
+
+  /* ─────────────────────────────────────────────
+     Audio Visualization (The Orb)
+     ───────────────────────────────────────────── */
   const startAudioVisualization = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -67,9 +115,7 @@ export function VoiceInput({ onTranscript, onProgress, className = '' }: VoiceIn
   }, []);
 
   const stopAudioVisualization = useCallback(() => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-    }
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -77,15 +123,36 @@ export function VoiceInput({ onTranscript, onProgress, className = '' }: VoiceIn
     setAudioLevel(0);
   }, []);
 
-  const startListening = useCallback(() => {
+  /* ─────────────────────────────────────────────
+     Auto-Send Logic
+     ───────────────────────────────────────────── */
+  const commitAndSend = useCallback(() => {
+    const finalMsg = currentTextRef.current.trim();
+    if (finalMsg) {
+      onTranscript(finalMsg);
+      setTranscript('');
+      setInterimText('');
+      currentTextRef.current = '';
+    }
+  }, [onTranscript]);
+
+  const resetSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = setTimeout(() => {
+      // If we've been silent for `autoSendDelay`, send what we have
+      commitAndSend();
+    }, autoSendDelay);
+  }, [commitAndSend, autoSendDelay]);
+
+  /* ─────────────────────────────────────────────
+     Speech Recognition Core
+     ───────────────────────────────────────────── */
+  const startListeningCore = useCallback(() => {
     if (!hasWebSpeech) {
-      setError('Voice input is not supported in this browser. Try Chrome.');
+      setError('Voice input is not supported in this browser.');
       return;
     }
-
     setError('');
-    setTranscript('');
-    setInterimText('');
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
@@ -111,55 +178,92 @@ export function VoiceInput({ onTranscript, onProgress, className = '' }: VoiceIn
           interim += event.results[i][0].transcript;
         }
       }
+      
       if (final) {
-        setTranscript(prev => prev + final);
+        setTranscript(prev => {
+          const updated = prev + final;
+          currentTextRef.current = updated + interim;
+          return updated;
+        });
+      } else {
+        currentTextRef.current = transcript + interim;
       }
+      
       setInterimText(interim);
+      resetSilenceTimer(); // Reset the auto-send timer whenever we hear something
     };
 
     recognition.onerror = (event: any) => {
-      if (event.error === 'no-speech') {
-        setError('No speech detected. Try again.');
-      } else if (event.error === 'not-allowed') {
-        setError('Microphone access denied. Please allow microphone access.');
-      } else {
+      if (event.error !== 'no-speech') {
         setError(`Speech error: ${event.error}`);
+        setIsListening(false);
+        stopAudioVisualization();
       }
-      setIsListening(false);
-      stopAudioVisualization();
     };
 
     recognition.onend = () => {
-      setIsListening(false);
-      stopAudioVisualization();
-      onProgress?.('');
+      // If still supposed to be listening (continuous mode), restart it
+      if (isListening) {
+        try {
+          recognition.start();
+        } catch (e) {
+          setIsListening(false);
+          stopAudioVisualization();
+        }
+      } else {
+        stopAudioVisualization();
+        onProgress?.('');
+      }
     };
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [selectedLang, hasWebSpeech, onProgress, startAudioVisualization, stopAudioVisualization]);
+  }, [selectedLang, hasWebSpeech, onProgress, startAudioVisualization, stopAudioVisualization, isListening, transcript, resetSilenceTimer]);
 
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+  /* ─────────────────────────────────────────────
+     Voice Mode Toggle
+     ───────────────────────────────────────────── */
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      // Turn OFF
+      setIsListening(false);
+      playSound('off');
+      if (recognitionRef.current) recognitionRef.current.stop();
+      stopAudioVisualization();
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      commitAndSend(); // send whatever was left
+    } else {
+      // Turn ON
+      playSound('on');
+      setIsSpeakingWelcome(true);
+      
+      // Speak welcome message first
+      const msg = new SpeechSynthesisUtterance("Hi, I'm Pandora. How can I help you today?");
+      msg.lang = 'en-US'; // always greet in English for now
+      msg.rate = 1.1;
+      
+      msg.onend = () => {
+        setIsSpeakingWelcome(false);
+        startListeningCore();
+      };
+      
+      msg.onerror = () => {
+        // Fallback if synthesis fails
+        setIsSpeakingWelcome(false);
+        startListeningCore();
+      };
+      
+      window.speechSynthesis.speak(msg);
     }
-    stopAudioVisualization();
-  }, [stopAudioVisualization]);
-
-  const handleSend = () => {
-    const text = (transcript + interimText).trim();
-    if (text) {
-      onTranscript(text);
-      setTranscript('');
-      setInterimText('');
-    }
-  };
+  }, [isListening, startListeningCore, stopAudioVisualization, commitAndSend]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (recognitionRef.current) recognitionRef.current.stop();
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       stopAudioVisualization();
+      window.speechSynthesis.cancel();
     };
   }, [stopAudioVisualization]);
 
@@ -167,131 +271,123 @@ export function VoiceInput({ onTranscript, onProgress, className = '' }: VoiceIn
   const fullText = transcript + interimText;
 
   return (
-    <div className={`relative ${className}`}>
-      {/* Main Voice Button */}
-      <div className="flex items-center gap-3">
-        {/* Language Picker */}
-        <div className="relative">
-          <button
-            onClick={() => setShowLangPicker(!showLangPicker)}
-            className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#111] border border-white/10 text-xs text-gray-400 hover:text-white hover:border-white/20 transition-all cursor-pointer"
-            title="Select language"
-          >
-            <Globe size={14} />
-            <span>{currentLang.flag}</span>
-          </button>
-
-          <AnimatePresence>
-            {showLangPicker && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                className="absolute bottom-full left-0 mb-2 bg-[#0a0a0a] border border-white/10 rounded-xl p-1 z-50 min-w-[160px]"
-              >
-                {LANGUAGES.map(lang => (
-                  <button
-                    key={lang.code}
-                    onClick={() => { setSelectedLang(lang.code); setShowLangPicker(false); }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer ${
-                      selectedLang === lang.code ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    <span>{lang.flag}</span>
-                    <span>{lang.name}</span>
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Mic Button */}
-        <button
-          onClick={isListening ? stopListening : startListening}
-          className={`relative flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 cursor-pointer ${
-            isListening
-              ? 'bg-red-500/20 border-2 border-red-500/50 text-red-400'
-              : 'bg-white/5 border border-white/10 text-white hover:bg-white/10 hover:border-white/20'
+    <div className={`relative flex flex-col items-center ${className}`}>
+      {/* Dynamic Orb / Main Button */}
+      <div className="relative group cursor-pointer" onClick={toggleListening}>
+        {/* Glow behind orb */}
+        {isListening && (
+          <motion.div
+            className="absolute inset-0 rounded-full bg-pandora-500/20 blur-xl pointer-events-none"
+            animate={{ scale: 1 + audioLevel * 1.5, opacity: 0.5 + audioLevel * 0.5 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.1 }}
+          />
+        )}
+        
+        <motion.div
+          className={`relative z-10 w-14 h-14 rounded-full flex items-center justify-center transition-colors duration-500 overflow-hidden ${
+            isListening ? 'bg-gradient-to-br from-pandora-400 to-pandora-600 shadow-[0_0_30px_rgba(139,92,246,0.3)]' 
+            : isSpeakingWelcome ? 'bg-white text-black' 
+            : 'bg-[#111] border border-white/10 hover:bg-[#1a1a1a]'
           }`}
+          animate={isListening ? { scale: 1 + (audioLevel * 0.2) } : { scale: 1 }}
+          transition={{ type: 'spring', bounce: 0, duration: 0.1 }}
         >
-          {/* Audio level pulse */}
-          {isListening && (
-            <motion.div
-              className="absolute inset-0 rounded-full bg-red-500/10"
-              animate={{ scale: 1 + audioLevel * 0.5 }}
-              transition={{ duration: 0.1 }}
+          {isSpeakingWelcome ? (
+            <motion.div 
+              animate={{ rotate: 360 }} 
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              className="w-full h-full rounded-full border-2 border-transparent border-t-black/50 border-r-black/50"
             />
+          ) : isListening ? (
+            <div className="flex gap-1">
+              {[0, 1, 2].map(i => (
+                <motion.div
+                  key={i}
+                  className="w-1.5 bg-white rounded-full"
+                  animate={{ height: [6, 6 + (audioLevel * 20), 6] }}
+                  transition={{ duration: 0.3, repeat: Infinity, delay: i * 0.1 }}
+                />
+              ))}
+            </div>
+          ) : (
+            <Mic size={20} className="text-gray-400 group-hover:text-white transition-colors" />
           )}
-          <span className="relative z-10">
-            {isListening ? <MicOff size={20} /> : <Mic size={20} />}
-          </span>
+        </motion.div>
+        
+        {/* Tooltip hint */}
+        {!isListening && !isSpeakingWelcome && (
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 bg-white/10 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity">
+            Tap to talk
+          </div>
+        )}
+        {isListening && (
+          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center justify-center">
+            <span className="text-[10px] text-pandora-400 uppercase tracking-widest font-medium animate-pulse">
+              Listening...
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Language Picker (Moved to bottom/side to keep orb centered) */}
+      <div className="absolute top-1/2 -translate-y-1/2 -left-12 flex flex-col items-center">
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowLangPicker(!showLangPicker); }}
+          className="p-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-gray-400 hover:text-white transition-all cursor-pointer"
+          title="Select language"
+        >
+          <span>{currentLang.flag}</span>
         </button>
 
-        {/* Send button (visible when there's text) */}
-        {fullText.trim() && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            onClick={handleSend}
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-black hover:bg-gray-200 transition-colors cursor-pointer"
-          >
-            <Send size={16} />
-          </motion.button>
-        )}
+        <AnimatePresence>
+          {showLangPicker && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              className="absolute left-full ml-2 top-0 bg-[#0a0a0a] border border-white/10 rounded-xl p-1 z-50 min-w-[120px]"
+            >
+              {LANGUAGES.map(lang => (
+                <button
+                  key={lang.code}
+                  onClick={(e) => { e.stopPropagation(); setSelectedLang(lang.code); setShowLangPicker(false); }}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                    selectedLang === lang.code ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  <span>{lang.flag}</span>
+                  <span>{lang.name}</span>
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Transcription Display */}
       <AnimatePresence>
         {(isListening || fullText) && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-3 overflow-hidden"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute bottom-full mb-8 w-64 md:w-80 left-1/2 -translate-x-1/2"
           >
-            <div className="p-3 rounded-xl bg-[#111] border border-white/10 relative">
-              {/* Clear button */}
+            <div className="p-4 rounded-2xl bg-[#111]/90 backdrop-blur-xl border border-white/10 relative shadow-2xl">
               {fullText && !isListening && (
                 <button
-                  onClick={() => { setTranscript(''); setInterimText(''); }}
+                  onClick={() => { setTranscript(''); setInterimText(''); currentTextRef.current = ''; }}
                   className="absolute top-2 right-2 text-gray-500 hover:text-white transition-colors cursor-pointer"
                 >
                   <X size={14} />
                 </button>
               )}
 
-              {/* Status */}
-              {isListening && (
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex gap-0.5">
-                    {[0, 1, 2].map(i => (
-                      <motion.div
-                        key={i}
-                        className="w-1 bg-red-400 rounded-full"
-                        animate={{
-                          height: [4, 4 + audioLevel * 12, 4],
-                        }}
-                        transition={{
-                          duration: 0.3,
-                          repeat: Infinity,
-                          delay: i * 0.1,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[10px] text-red-400 uppercase tracking-widest font-medium">
-                    Listening • {currentLang.name}
-                  </span>
-                </div>
-              )}
-
-              {/* Transcript text */}
-              <p className="text-sm text-white font-light leading-relaxed pr-6">
+              <p className="text-sm text-white font-light leading-relaxed text-center">
                 {transcript}
-                <span className="text-gray-400">{interimText}</span>
+                <span className="text-pandora-300">{interimText}</span>
                 {isListening && !fullText && (
-                  <span className="text-gray-600 italic">Speak now...</span>
+                  <span className="text-gray-500 italic">I'm listening...</span>
                 )}
               </p>
             </div>
@@ -304,7 +400,7 @@ export function VoiceInput({ onTranscript, onProgress, className = '' }: VoiceIn
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-xs text-red-400 mt-2"
+          className="absolute top-full mt-2 text-xs text-red-400 whitespace-nowrap"
         >
           {error}
         </motion.p>
