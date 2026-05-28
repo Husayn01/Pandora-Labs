@@ -321,6 +321,46 @@ function InstallWizardModal({
   const isRagAgent = agent.type === 'support';
   const hasConnectors = agent.required_connectors.length > 0;
 
+  const getAccessToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Session expired. Please sign in again.');
+    return session.access_token;
+  };
+
+  const handleConnectorAuthorize = async (connector: string) => {
+    if (!user) return;
+
+    const endpoints: Record<string, string> = {
+      google_calendar: '/api/connectors/google-calendar',
+      gmail: '/api/connectors/gmail',
+      notion: '/api/connectors/notion',
+    };
+
+    const endpoint = endpoints[connector];
+    if (!endpoint) {
+      setError(`Connector for ${connector.replace(/_/g, ' ')} is not implemented yet.`);
+      return;
+    }
+
+    setError('');
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await fetch(`${endpoint}?action=authorize`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.authUrl) {
+        throw new Error(data.error || 'Failed to start OAuth flow');
+      }
+
+      window.location.href = data.authUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to connect service');
+    }
+  };
+
   // Build steps
   const steps: { title: string; key: string }[] = [
     { title: 'Review', key: 'review' },
@@ -336,6 +376,7 @@ function InstallWizardModal({
     setError('');
 
     try {
+      const accessToken = await getAccessToken();
       // 1. Install agent
       const { data: userAgent, error: installError } = await supabase
         .from('user_agents')
@@ -351,7 +392,8 @@ function InstallWizardModal({
 
       // 2. Upload knowledge files (for RAG agents)
       for (const file of files) {
-        const filePath = `${user.id}/${userAgent.id}/${file.name}`;
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filePath = `${user.id}/${userAgent.id}/${Date.now()}-${safeName}`;
         const { error: uploadError } = await supabase.storage
           .from('knowledge_files')
           .upload(filePath, file);
@@ -360,7 +402,6 @@ function InstallWizardModal({
         const { data: fileData, error: fileDbError } = await supabase
           .from('agent_knowledge_files')
           .insert({
-            agent_id: userAgent.id,
             user_agent_id: userAgent.id,
             user_id: user.id,
             file_name: file.name,
@@ -377,7 +418,10 @@ function InstallWizardModal({
         // Trigger processing
         fetch('/api/process-knowledge', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: JSON.stringify({
             fileId: fileData.id,
             agentId: userAgent.id,
@@ -479,19 +523,7 @@ function InstallWizardModal({
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    onClick={() => {
-                      if (!user) return;
-                      let endpoint = '';
-                      if (connector === 'google_calendar') endpoint = '/api/connectors/google-calendar';
-                      else if (connector === 'gmail') endpoint = '/api/connectors/gmail';
-                      else if (connector === 'notion') endpoint = '/api/connectors/notion';
-                      
-                      if (endpoint) {
-                        window.location.href = `${endpoint}?action=authorize&userId=${user.id}`;
-                      } else {
-                        alert(`Connector for ${connector} not implemented yet`);
-                      }
-                    }}
+                    onClick={() => handleConnectorAuthorize(connector)}
                   >
                     Connect
                   </Button>
@@ -510,7 +542,7 @@ function InstallWizardModal({
                 <input
                   type="file"
                   multiple
-                  accept=".pdf,.txt,.md,.doc,.docx,.csv"
+                  accept=".pdf,.txt,.md,.csv"
                   onChange={(e) => e.target.files && setFiles(Array.from(e.target.files))}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
@@ -518,7 +550,7 @@ function InstallWizardModal({
                 <p className="text-sm text-gray-300 font-light">
                   Drag & drop or <span className="text-white font-medium">browse</span>
                 </p>
-                <p className="text-[10px] text-gray-600">PDF, TXT, MD, DOC, CSV — up to 10 MB</p>
+                <p className="text-[10px] text-gray-600">PDF, TXT, MD, CSV - up to 10 MB</p>
               </div>
               {files.length > 0 && (
                 <div className="space-y-2">

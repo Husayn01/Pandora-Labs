@@ -26,6 +26,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 async function seedDemoUser() {
   const email = 'demo@pandoralabs.ai';
   const password = 'demo1234';
+  let userId = null;
 
   console.log('Creating demo user...');
 
@@ -48,6 +49,7 @@ async function seedDemoUser() {
         
         const existingUser = usersData.users.find(u => u.email === email);
         if (existingUser) {
+           userId = existingUser.id;
            const { error: updateError } = await supabase.auth.admin.updateUserById(
              existingUser.id,
              { password: password, email_confirm: true }
@@ -60,6 +62,31 @@ async function seedDemoUser() {
       }
     } else {
       console.log('Successfully created demo user:', data.user.id);
+      userId = data.user.id;
+    }
+
+    if (userId) {
+      const { data: defaultAgents, error: catalogError } = await supabase
+        .from('agent_catalog')
+        .select('id')
+        .eq('is_default', true);
+
+      if (catalogError) throw catalogError;
+
+      const rows = (defaultAgents || []).map((agent) => ({
+        user_id: userId,
+        catalog_agent_id: agent.id,
+        is_active: true,
+      }));
+
+      if (rows.length > 0) {
+        const { error: installError } = await supabase
+          .from('user_agents')
+          .upsert(rows, { onConflict: 'user_id,catalog_agent_id' });
+
+        if (installError) throw installError;
+        console.log('Default agents installed for demo user.');
+      }
     }
   } catch (err) {
     console.error('Error seeding demo user:', err);

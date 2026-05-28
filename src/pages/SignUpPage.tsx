@@ -30,7 +30,7 @@ export default function SignUpPage() {
       return;
     }
 
-    const { error } = await signUp(email, password);
+    const { error } = await signUp(email, password, fullName.trim());
     if (error) {
       setError(error.message);
       setLoading(false);

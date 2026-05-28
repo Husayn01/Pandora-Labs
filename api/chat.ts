@@ -1,20 +1,38 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
+  createSupabaseAdminClient,
+  HttpError,
+  requireAuthenticatedUser,
+  sendError,
+  setCorsHeaders,
+} from '../server/api-utils';
 
-// Initialize Supabase Client (Service Role for DB operations, but we verify user JWT)
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+interface CatalogAgent {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  category: string;
+  icon: string | null;
+  type: string;
+  capabilities: string[] | null;
+  default_system_prompt: string | null;
+}
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+interface UserAgentRecord {
+  id: string;
+  custom_system_prompt: string | null;
+  is_active: boolean;
+  catalog: CatalogAgent | CatalogAgent[] | null;
+}
+
+function getCatalog(catalog: CatalogAgent | CatalogAgent[] | null): CatalogAgent | null {
+  return Array.isArray(catalog) ? catalog[0] ?? null : catalog;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -25,30 +43,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { message, conversationId, userId } = req.body;
-    const authHeader = req.headers.authorization;
+    const supabase = createSupabaseAdminClient();
+    const { user } = await requireAuthenticatedUser(req, supabase);
+    const { message, conversationId, userId } = req.body as {
+      message?: string;
+      conversationId?: string;
+      userId?: string;
+    };
 
-    if (!message || !userId || !authHeader) {
-      return res.status(400).json({ error: 'Missing message, userId, or auth header' });
+    if (!message?.trim()) {
+      throw new HttpError(400, 'Missing message');
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user || user.id !== userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    if (userId && user.id !== userId) {
+      throw new HttpError(401, 'Unauthorized');
     }
 
     let activeConversationId = conversationId;
 
-    // Create conversation if it doesn't exist
-    if (!activeConversationId) {
+    if (activeConversationId) {
+      const { data: existingConversation, error: conversationLookupError } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('id', activeConversationId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (conversationLookupError) throw conversationLookupError;
+      if (!existingConversation) throw new HttpError(404, 'Conversation not found');
+    } else {
       const { data: conv, error: convError } = await supabase
         .from('conversations')
         .insert({
           user_id: user.id,
-          title: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
-          channel: 'web'
+          title: message.trim().substring(0, 50) + (message.trim().length > 50 ? '...' : ''),
+          channel: 'web',
         })
         .select()
         .single();
@@ -63,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .insert({
         conversation_id: activeConversationId,
         sender_type: 'user',
-        content: message,
+        content: message.trim(),
       });
       
     if (msgError) throw msgError;
@@ -83,15 +112,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (agentsError) throw agentsError;
 
     // Format agents for the router prompt
-    const availableAgents = (userAgents || []).map((ua: any) => ({
-      user_agent_id: ua.id,
-      slug: Array.isArray(ua.catalog) ? ua.catalog[0]?.slug : ua.catalog?.slug,
-      name: Array.isArray(ua.catalog) ? ua.catalog[0]?.name : ua.catalog?.name,
-      description: Array.isArray(ua.catalog) ? ua.catalog[0]?.description : ua.catalog?.description,
-      capabilities: Array.isArray(ua.catalog) ? ua.catalog[0]?.capabilities : ua.catalog?.capabilities,
-      icon: Array.isArray(ua.catalog) ? ua.catalog[0]?.icon : ua.catalog?.icon,
-      system_prompt: ua.custom_system_prompt || (Array.isArray(ua.catalog) ? ua.catalog[0]?.default_system_prompt : ua.catalog?.default_system_prompt),
-    })).filter(a => a.slug !== 'pandora-router'); // Exclude router itself from choices
+    const availableAgents = ((userAgents || []) as UserAgentRecord[])
+      .map((ua) => {
+        const catalog = getCatalog(ua.catalog);
+        return {
+          user_agent_id: ua.id,
+          slug: catalog?.slug,
+          name: catalog?.name,
+          description: catalog?.description,
+          capabilities: catalog?.capabilities,
+          icon: catalog?.icon,
+          system_prompt: ua.custom_system_prompt || catalog?.default_system_prompt,
+        };
+      })
+      .filter((agent) => agent.slug && agent.slug !== 'pandora-router');
+
+    if (!process.env.GEMINI_API_KEY) {
+      throw new HttpError(500, 'Gemini API key is not configured.');
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
     // Configure Gemini Router
     const model = genAI.getGenerativeModel({ 
@@ -128,7 +168,7 @@ You must respond with valid JSON in this exact format:
       routerDecision = {
         routed_to_slug: 'pandora-router',
         reasoning: 'Failed to parse routing decision',
-        response: responseText
+        response: responseText,
       };
     }
 
@@ -141,8 +181,8 @@ You must respond with valid JSON in this exact format:
 
     if (matchedAgent) {
       userAgentId = matchedAgent.user_agent_id;
-      agentName = matchedAgent.name;
-      agentIcon = matchedAgent.icon;
+      agentName = matchedAgent.name || agentName;
+      agentIcon = matchedAgent.icon || agentIcon;
 
       // Increment messages handled for this agent
       await supabase.rpc('increment_messages_handled', { row_id: userAgentId });
@@ -169,8 +209,7 @@ You must respond with valid JSON in this exact format:
       conversationId: activeConversationId
     });
 
-  } catch (error: any) {
-    console.error('Error in chat API:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error' });
+  } catch (error) {
+    return sendError(res, error);
   }
 }

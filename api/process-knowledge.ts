@@ -1,21 +1,44 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
+import {
+  createSupabaseAdminClient,
+  HttpError,
+  requireAuthenticatedUser,
+  sendError,
+  setCorsHeaders,
+} from '../server/api-utils';
 
-// Initialize Supabase Client
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+interface KnowledgeFileRecord {
+  id: string;
+  user_id: string;
+  user_agent_id: string | null;
+  file_name: string;
+  storage_path: string;
+}
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+function splitIntoChunks(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return [];
+
+  const chunks: string[] = [];
+  const paragraphs = normalized.split(/\n\s*\n/).map((chunk) => chunk.trim()).filter(Boolean);
+
+  for (const paragraph of paragraphs.length > 0 ? paragraphs : [normalized]) {
+    if (paragraph.length <= 2000) {
+      chunks.push(paragraph);
+      continue;
+    }
+
+    const subChunks = paragraph.match(/[\s\S]{1,1500}/g) || [];
+    chunks.push(...subChunks.map((chunk) => chunk.trim()).filter(Boolean));
+  }
+
+  return chunks;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -25,15 +48,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    const { fileId, agentId, userId } = req.body;
+  let authenticatedUserId: string | null = null;
+  let requestedFileId: string | null = null;
 
-    if (!fileId || !agentId || !userId) {
-      return res.status(400).json({ error: 'Missing required fields' });
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { user } = await requireAuthenticatedUser(req, supabase);
+    authenticatedUserId = user.id;
+
+    const { fileId, agentId, userId } = req.body as {
+      fileId?: string;
+      agentId?: string;
+      userId?: string;
+    };
+    requestedFileId = fileId || null;
+
+    if (!fileId || !agentId) {
+      throw new HttpError(400, 'Missing required fields');
+    }
+
+    if (userId && userId !== user.id) {
+      throw new HttpError(401, 'Unauthorized');
     }
 
     if (!process.env.GEMINI_API_KEY) {
-       console.warn('GEMINI_API_KEY is not set. Processing will fail.');
+      throw new HttpError(500, 'Gemini API key is not configured.');
     }
 
     // 1. Fetch file record from DB
@@ -41,10 +80,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('agent_knowledge_files')
       .select('*')
       .eq('id', fileId)
-      .single();
+      .eq('user_id', user.id)
+      .maybeSingle<KnowledgeFileRecord>();
 
     if (fetchError || !fileRecord) {
-      throw new Error('File record not found');
+      throw new HttpError(404, 'File record not found');
+    }
+
+    if (fileRecord.user_agent_id && fileRecord.user_agent_id !== agentId) {
+      throw new HttpError(403, 'File does not belong to this agent');
     }
 
     // 2. Download file from Supabase Storage
@@ -60,13 +104,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let extractedText = '';
     const arrayBuffer = await fileBlob.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    const lowerName = fileRecord.file_name.toLowerCase();
 
-    if (fileRecord.file_name.toLowerCase().endsWith('.pdf')) {
-      const pdfData = await pdfParse(buffer);
-      extractedText = pdfData.text;
-    } else {
+    if (lowerName.endsWith('.pdf')) {
+      const parser = new PDFParse({ data: buffer });
+      try {
+        const pdfData = await parser.getText();
+        extractedText = pdfData.text;
+      } finally {
+        await parser.destroy();
+      }
+    } else if (/\.(txt|md|csv)$/i.test(lowerName)) {
       // Assume text-based file (txt, md, csv)
       extractedText = buffer.toString('utf-8');
+    } else {
+      throw new HttpError(400, 'Unsupported file type. Upload PDF, TXT, MD, or CSV files.');
     }
 
     if (!extractedText.trim()) {
@@ -74,22 +126,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 4. Chunk the text (simple chunking by paragraphs or length)
-    // For MVP, we split by double newline or chunk by ~1000 characters
-    const chunks = extractedText.split(/\n\s*\n/).filter(c => c.trim().length > 50);
-    
-    // Fallback if chunks are too large
-    const finalChunks: string[] = [];
-    for (const chunk of chunks) {
-      if (chunk.length > 2000) {
-        const subChunks = chunk.match(/.{1,1500}/g) || [];
-        finalChunks.push(...subChunks);
-      } else {
-        finalChunks.push(chunk);
-      }
+    const finalChunks = splitIntoChunks(extractedText);
+
+    if (finalChunks.length === 0) {
+      throw new Error('No usable text chunks extracted from file');
     }
 
     // 5. Generate embeddings and store in DB
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
+    let storedChunks = 0;
     
     for (const chunk of finalChunks) {
       try {
@@ -101,17 +147,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('knowledge_embeddings')
           .insert({
             file_id: fileId,
-            user_id: userId,
+            user_id: user.id,
             content: chunk,
-            embedding: embedding
+            embedding,
           });
 
         if (insertError) {
           console.error('Error inserting embedding:', insertError);
+        } else {
+          storedChunks += 1;
         }
       } catch (embErr) {
          console.error('Error generating embedding for chunk:', embErr);
       }
+    }
+
+    if (storedChunks === 0) {
+      throw new Error('No embeddings were stored');
     }
 
     // 6. Update file status to completed
@@ -120,18 +172,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .update({ status: 'completed' })
       .eq('id', fileId);
 
-    return res.status(200).json({ success: true, message: 'File processed successfully', chunks: finalChunks.length });
-  } catch (error: any) {
+    return res.status(200).json({
+      success: true,
+      message: 'File processed successfully',
+      chunks: finalChunks.length,
+      storedChunks,
+    });
+  } catch (error) {
     console.error('Error processing knowledge:', error);
     
     // Update status to failed
-    if (req.body.fileId) {
-       await supabase
-        .from('agent_knowledge_files')
-        .update({ status: 'failed' })
-        .eq('id', req.body.fileId);
+    if (requestedFileId && authenticatedUserId) {
+      try {
+        const supabase = createSupabaseAdminClient();
+        await supabase
+          .from('agent_knowledge_files')
+          .update({ status: 'failed' })
+          .eq('id', requestedFileId)
+          .eq('user_id', authenticatedUserId);
+      } catch (statusError) {
+        console.error('Failed to mark knowledge file as failed:', statusError);
+      }
     }
 
-    return res.status(500).json({ error: error.message || 'Internal server error' });
+    return sendError(res, error);
   }
 }

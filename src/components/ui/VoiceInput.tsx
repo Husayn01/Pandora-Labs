@@ -10,6 +10,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Mic, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface VoiceInputProps {
   onTranscript: (text: string) => void;
@@ -233,9 +234,13 @@ export function VoiceInput({
       setIsSpeakingWelcome(true);
 
       try {
+        const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/tts', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
           body: JSON.stringify({ text: "Hi, I'm Pandora. How can I help you today?" }),
         });
         if (!res.ok) throw new Error('TTS failed');
@@ -290,7 +295,12 @@ export function VoiceInput({
   return (
     <div className={`relative flex items-center ${className}`}>
       {/* ── Compact Orb ── */}
-      <div className="relative group cursor-pointer" onClick={toggleListening}>
+      <button
+        type="button"
+        className="relative group cursor-pointer bg-transparent border-0 p-0"
+        onClick={toggleListening}
+        aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+      >
 
         {/* Glow */}
         {(isListening || isSpeakingWelcome) && (
@@ -339,7 +349,7 @@ export function VoiceInput({
             <Mic size={16} className="text-gray-400 group-hover:text-white transition-colors" />
           )}
         </motion.div>
-      </div>
+      </button>
 
       {/* Error */}
       {error && (

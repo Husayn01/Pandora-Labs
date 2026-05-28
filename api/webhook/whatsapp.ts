@@ -29,7 +29,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           for (const change of entry.changes) {
             if (change.value.messages) {
               const message = change.value.messages[0];
-              const phone_number_id = change.value.metadata.phone_number_id;
               const from = message.from; // Sender's phone number
               
               let messageText = '';

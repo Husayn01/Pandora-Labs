@@ -1,4 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import {
+  createSupabaseAdminClient,
+  HttpError,
+  requireAuthenticatedUser,
+  sendError,
+  setCorsHeaders,
+} from '../server/api-utils';
 
 /**
  * TTS Proxy — ElevenLabs
@@ -15,19 +22,31 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Sarah
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { text, voiceId = DEFAULT_VOICE_ID } = req.body;
+    const supabase = createSupabaseAdminClient();
+    await requireAuthenticatedUser(req, supabase);
+
+    const { text, voiceId = DEFAULT_VOICE_ID } = req.body as {
+      text?: string;
+      voiceId?: string;
+    };
     const apiKey = process.env.ELEVENLABS_API_KEY;
 
-    if (!text) {
-      return res.status(400).json({ error: 'missing_text', message: 'Missing text parameter' });
+    if (!text?.trim()) {
+      throw new HttpError(400, 'Missing text parameter');
+    }
+
+    if (text.length > 1500) {
+      throw new HttpError(400, 'Text is too long for text-to-speech.');
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(voiceId)) {
+      throw new HttpError(400, 'Invalid voice ID.');
     }
 
     if (!apiKey) {
@@ -81,8 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Content-Length', buffer.length.toString());
     res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache identical phrases for 24h
     return res.status(200).send(buffer);
-  } catch (error: any) {
-    console.error('TTS API error:', error);
-    return res.status(500).json({ error: 'server_error', message: error.message || 'Internal server error' });
+  } catch (error) {
+    return sendError(res, error);
   }
 }

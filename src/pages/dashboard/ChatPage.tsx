@@ -113,7 +113,15 @@ export default function ChatPage() {
   /* ── TTS ── */
   const playTTS = async (text: string) => {
     try {
-      const r = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ text }),
+      });
       if (!r.ok) throw new Error('TTS failed');
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
