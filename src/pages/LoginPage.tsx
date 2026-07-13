@@ -33,7 +33,9 @@ export default function LoginPage() {
   };
 
   const handleGoogleSignIn = async () => {
-    await signInWithGoogle();
+    setError('');
+    const { error } = await signInWithGoogle();
+    if (error) setError(error.message);
   };
 
   return (
@@ -88,7 +90,7 @@ export default function LoginPage() {
               <Input
                 label="Password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -120,8 +122,8 @@ export default function LoginPage() {
       {/* Right Image Side */}
       <div className="hidden lg:block lg:w-1/2 relative bg-black">
         <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-transparent to-transparent z-10" />
-        <img 
-          src="/images/section_character.png" 
+        <img
+          src="/images/section_character.png"
           alt="Pandora AI"
           className="absolute inset-0 w-full h-full object-cover object-left mix-blend-lighten grayscale opacity-90"
         />

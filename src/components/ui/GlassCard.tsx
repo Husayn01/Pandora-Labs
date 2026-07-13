@@ -10,7 +10,6 @@ import { clsx } from 'clsx';
 
 interface GlassCardProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onAnimationStart' | 'onDragStart' | 'onDrag' | 'onDragEnd'> {
   hover?: boolean;
-  glow?: boolean;
   padding?: 'sm' | 'md' | 'lg';
 }
 
@@ -21,7 +20,7 @@ const paddings = {
 };
 
 export const GlassCard = forwardRef<HTMLDivElement, GlassCardProps>(
-  ({ hover = true, glow = false, padding = 'md', className, children, ...props }, ref) => {
+  ({ hover = true, padding = 'md', className, children, ...props }, ref) => {
     return (
       <motion.div
         ref={ref}

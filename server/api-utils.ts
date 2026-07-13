@@ -1,5 +1,4 @@
-import crypto from 'node:crypto';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelRequest, VercelResponse } from './vercel-types';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 
 export class HttpError extends Error {
@@ -18,15 +17,20 @@ export function setCorsHeaders(
 ) {
   const configuredOrigin = process.env.SITE_URL || process.env.VITE_SITE_URL;
   const requestOrigin = req.headers.origin;
-  const origin =
-    configuredOrigin && requestOrigin === configuredOrigin
-      ? configuredOrigin
-      : configuredOrigin || '*';
+  const isLocalOrigin = typeof requestOrigin === 'string' && /^http:\/\/localhost:\d+$/.test(requestOrigin);
+  const origin = configuredOrigin && requestOrigin === configuredOrigin
+    ? configuredOrigin
+    : isLocalOrigin && process.env.NODE_ENV !== 'production'
+      ? requestOrigin
+      : configuredOrigin || 'https://pandoralabs.ai';
 
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', methods);
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key');
   res.setHeader('Vary', 'Origin');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), geolocation=()');
 }
 
 export function createSupabaseAdminClient(): SupabaseClient {
@@ -84,70 +88,11 @@ export function getBaseUrl(req: VercelRequest): string {
   return `${proto}://${host}`;
 }
 
-function getOAuthStateSecret(): string {
-  const secret = process.env.OAUTH_STATE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!secret) throw new HttpError(500, 'OAuth state secret is not configured.');
-  return secret;
-}
-
-function signPayload(payload: string): string {
-  return crypto
-    .createHmac('sha256', getOAuthStateSecret())
-    .update(payload)
-    .digest('base64url');
-}
-
-export function createOAuthState(provider: string, userId: string): string {
-  const payload = Buffer.from(
-    JSON.stringify({
-      provider,
-      userId,
-      ts: Date.now(),
-      nonce: crypto.randomUUID(),
-    })
-  ).toString('base64url');
-
-  return `${payload}.${signPayload(payload)}`;
-}
-
-export function verifyOAuthState(state: string, expectedProvider: string): string {
-  const [payload, signature] = state.split('.');
-  if (!payload || !signature) throw new HttpError(400, 'Invalid OAuth state.');
-
-  const expectedSignature = signPayload(payload);
-  const signatureBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expectedSignature);
-
-  if (
-    signatureBuffer.length !== expectedBuffer.length ||
-    !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
-  ) {
-    throw new HttpError(400, 'Invalid OAuth state signature.');
-  }
-
-  const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
-    provider?: string;
-    userId?: string;
-    ts?: number;
-  };
-
-  if (parsed.provider !== expectedProvider || !parsed.userId || !parsed.ts) {
-    throw new HttpError(400, 'Invalid OAuth state payload.');
-  }
-
-  if (Date.now() - parsed.ts > 10 * 60 * 1000) {
-    throw new HttpError(400, 'OAuth state has expired.');
-  }
-
-  return parsed.userId;
-}
-
 export function sendError(res: VercelResponse, error: unknown) {
   if (error instanceof HttpError) {
     return res.status(error.status).json({ error: error.message });
   }
 
-  const message = error instanceof Error ? error.message : 'Internal server error';
   console.error('Unhandled API error:', error);
-  return res.status(500).json({ error: message });
+  return res.status(500).json({ error: 'Internal server error' });
 }

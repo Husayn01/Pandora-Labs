@@ -80,6 +80,17 @@
 
 /* ─── Utility Animations ─── */
 @layer utilities {
+  .eyebrow {
+    @apply text-[11px] uppercase tracking-[0.24em] text-gray-500 mb-5;
+  }
+
+  .section-title {
+    @apply text-4xl md:text-6xl font-light tracking-[-0.045em] leading-[1.02];
+  }
+
+  .section-copy {
+    @apply mt-5 text-sm md:text-base leading-relaxed text-gray-500;
+  }
   /* Gradient text utility - now white/grey */
   .text-gradient-pandora {
     background: linear-gradient(135deg, #ffffff 0%, #a3a3a3 100%);

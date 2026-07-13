@@ -1,217 +1,87 @@
-/**
- * Dashboard Home Page
- * ────────────────────
- * Welcome message, live stats from Supabase, and quick actions.
- */
-
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  MessageSquare,
-  Bot,
-  Clock,
-  TrendingUp,
-  Store,
-  ArrowUpRight,
-  Sparkles,
-  Mic,
-} from 'lucide-react';
+import { Activity, ArrowUpRight, CalendarClock, CheckCircle2, Mic, ShieldCheck, Sparkles } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { GlassCard } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
-import { GlassCard, AnimatedCounter, Button } from '@/components/ui';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import { supabase } from '@/lib/supabase';
-
-const containerVariants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.1 } },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
-};
+import type { ApprovalRequest, WorkflowEvent } from '@/types/platform';
 
 export default function DashboardHome() {
   const { user } = useAuth();
-  const [agentCount, setAgentCount] = useState(0);
-  const [messageCount, setMessageCount] = useState(0);
+  const { organization, role, loading: workspaceLoading } = useWorkspace();
+  const [events, setEvents] = useState<WorkflowEvent[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [openTasks, setOpenTasks] = useState(0);
+  const [upcomingReminders, setUpcomingReminders] = useState(0);
 
-  // Fetch real stats
   useEffect(() => {
-    if (!user) return;
-    const fetchStats = async () => {
-      const [{ count: agents }, { count: messages }] = await Promise.all([
-        supabase.from('user_agents').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('messages').select('*', { count: 'exact', head: true }),
+    if (!organization) return;
+    const load = async () => {
+      const [eventResult, approvalResult, taskResult, reminderResult] = await Promise.all([
+        supabase.from('workflow_events').select('id,event_type,status,summary,workflow_name,created_at').eq('organization_id', organization.id).order('created_at', { ascending: false }).limit(6),
+        supabase.from('approval_requests').select('id,action_type,risk_level,status,action_preview,expires_at,created_at').eq('organization_id', organization.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(4),
+        supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('organization_id', organization.id).in('status', ['open', 'in_progress', 'blocked']),
+        supabase.from('reminders').select('*', { count: 'exact', head: true }).eq('organization_id', organization.id).eq('status', 'scheduled').gte('remind_at', new Date().toISOString()),
       ]);
-      setAgentCount(agents || 0);
-      setMessageCount(messages || 0);
+      setEvents((eventResult.data ?? []) as WorkflowEvent[]);
+      setApprovals((approvalResult.data ?? []) as ApprovalRequest[]);
+      setOpenTasks(taskResult.count ?? 0);
+      setUpcomingReminders(reminderResult.count ?? 0);
     };
-    fetchStats();
-  }, [user]);
+    void load();
+  }, [organization]);
 
-  const firstName = user?.user_metadata?.full_name?.split(' ')[0]
-    || user?.email?.split('@')[0]
-    || 'Founder';
+  const firstName = useMemo(() => user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Founder', [user]);
 
-  const stats = [
-    {
-      label: 'Messages Handled',
-      value: messageCount,
-      suffix: '',
-      icon: MessageSquare,
-      change: 'All time',
-      color: 'text-white',
-      bgColor: 'bg-white/5',
-      borderColor: 'border-white/10',
-    },
-    {
-      label: 'Agents Installed',
-      value: agentCount,
-      suffix: '',
-      icon: Bot,
-      change: 'Active swarm',
-      color: 'text-gray-300',
-      bgColor: 'bg-white/5',
-      borderColor: 'border-white/10',
-    },
-    {
-      label: 'Time Saved This Week',
-      value: Math.round(messageCount * 0.3),
-      suffix: 'min',
-      icon: Clock,
-      change: 'Estimated',
-      color: 'text-gray-400',
-      bgColor: 'bg-white/5',
-      borderColor: 'border-white/10',
-    },
-    {
-      label: 'Agent Efficiency',
-      value: agentCount > 0 ? 97 : 0,
-      suffix: '%',
-      icon: TrendingUp,
-      change: 'Uptime',
-      color: 'text-gray-500',
-      bgColor: 'bg-white/5',
-      borderColor: 'border-white/10',
-    },
-  ];
+  if (workspaceLoading) return <div className="p-8 text-sm text-gray-500">Preparing your workspace…</div>;
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-1 tracking-tight">
-              Welcome back, <span className="font-light">{firstName}</span>
-            </h1>
-            <p className="text-sm text-gray-400 font-light">
-              Here's what Pandora has been doing for you.
-            </p>
+    <div className="p-5 md:p-8 max-w-7xl mx-auto space-y-8">
+      <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0a0a0a] p-6 md:p-9">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_20%,rgba(255,255,255,0.08),transparent_30%)]" />
+        <div className="relative max-w-3xl">
+          <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500 mb-4">{organization?.name ?? 'Pandora workspace'} · {role}</p>
+          <h1 className="text-3xl md:text-5xl font-light tracking-tight text-white">Good to have you back, {firstName}.</h1>
+          <p className="mt-4 text-gray-400 max-w-2xl leading-relaxed">Pandora is ready to answer calls, clarify requests, and keep every approved action visible here.</p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Link to="/dashboard/chat" className="inline-flex items-center gap-2 rounded-full bg-white text-black px-5 py-3 text-sm font-semibold"><Mic size={16}/> Talk to Pandora</Link>
+            <Link to="/dashboard/integrations" className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm text-white hover:bg-white/5">Check readiness <ArrowUpRight size={15}/></Link>
           </div>
-
-          <Link to="/dashboard/store">
-            <Button variant="primary" size="md" className="group">
-              <Store size={16} />
-              Explore Agent Store
-              <Sparkles size={14} className="text-gray-400 group-hover:text-black group-hover:rotate-12 transition-transform" />
-            </Button>
-          </Link>
         </div>
-      </motion.div>
+      </section>
 
-      {/* Stats Grid */}
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
-      >
-        {stats.map((stat) => (
-          <motion.div key={stat.label} variants={itemVariants}>
-            <GlassCard className="group relative overflow-hidden">
-              <div className={`absolute top-0 right-0 w-24 h-24 ${stat.bgColor} rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 opacity-50 group-hover:opacity-80 transition-opacity`} />
-              <div className="relative z-10">
-                <div className={`inline-flex items-center justify-center w-10 h-10 rounded-xl ${stat.bgColor} border ${stat.borderColor} mb-3`}>
-                  <stat.icon size={20} className={stat.color} />
-                </div>
-                <div className="text-3xl font-bold text-white mb-1">
-                  <AnimatedCounter
-                    target={stat.value}
-                    suffix={stat.suffix ? ` ${stat.suffix}` : ''}
-                    duration={1.5}
-                  />
-                </div>
-                <p className="text-xs text-gray-400 mb-2">{stat.label}</p>
-                <div className="inline-flex items-center gap-1 text-xs font-medium text-gray-500">
-                  <ArrowUpRight size={12} />
-                  {stat.change}
-                </div>
-              </div>
-            </GlassCard>
-          </motion.div>
+      <section className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {([
+          [openTasks, 'Open tasks', CheckCircle2],
+          [upcomingReminders, 'Upcoming reminders', CalendarClock],
+          [approvals.length, 'Awaiting approval', ShieldCheck],
+          [events.length, 'Recent operations', Activity],
+        ] as Array<[number,string,LucideIcon]>).map(([value, label, Icon]) => (
+          <GlassCard key={String(label)} hover={false} className="p-5">
+            <Icon size={18} className="text-gray-400 mb-5" />
+            <p className="text-3xl font-light text-white">{String(value)}</p>
+            <p className="text-xs text-gray-500 mt-2">{String(label)}</p>
+          </GlassCard>
         ))}
-      </motion.div>
+      </section>
 
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.4 }}
-      >
-        <GlassCard hover={false} className="bg-[#0a0a0a]">
-          <h2 className="text-lg font-medium text-white mb-6 tracking-tight">Quick Actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Link to="/dashboard/store">
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-[#111] border border-white/5 hover:border-white/20 hover:bg-[#151515] transition-all duration-200 group cursor-pointer">
-                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                  <Store size={18} className="text-white" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white group-hover:text-gray-300 transition-colors">
-                    Browse Agent Store
-                  </p>
-                  <p className="text-xs text-gray-500 font-light mt-0.5">Install new capabilities</p>
-                </div>
-              </div>
-            </Link>
-
-            <Link to="/dashboard/agents">
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-[#111] border border-white/5 hover:border-white/20 hover:bg-[#151515] transition-all duration-200 group cursor-pointer">
-                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                  <Bot size={18} className="text-white" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white group-hover:text-gray-300 transition-colors">
-                    Manage Agents
-                  </p>
-                  <p className="text-xs text-gray-500 font-light mt-0.5">View your active swarm</p>
-                </div>
-              </div>
-            </Link>
-
-            <Link to="/dashboard/chat">
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-[#111] border border-white/5 hover:border-white/20 hover:bg-[#151515] transition-all duration-200 group cursor-pointer h-full">
-                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                  <Mic size={18} className="text-white" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white group-hover:text-gray-300 transition-colors">
-                    Talk to Pandora
-                  </p>
-                  <p className="text-xs text-gray-500 font-light mt-0.5">Voice command via chat</p>
-                </div>
-              </div>
-            </Link>
+      <section className="grid lg:grid-cols-[1.4fr_1fr] gap-5">
+        <GlassCard hover={false} className="p-6">
+          <div className="flex items-center justify-between mb-5"><div><p className="text-xs uppercase tracking-[0.2em] text-gray-500">Live activity</p><h2 className="text-xl text-white mt-1">What Pandora has done</h2></div><Link to="/dashboard/operations" className="text-xs text-gray-400 hover:text-white">View all</Link></div>
+          <div className="divide-y divide-white/5">
+            {events.length ? events.map(event => <div key={event.id} className="py-4 flex gap-3"><span className={`mt-1 h-2 w-2 rounded-full ${event.status === 'error' ? 'bg-red-400' : event.status === 'warning' ? 'bg-amber-400' : 'bg-emerald-400'}`} /><div className="min-w-0"><p className="text-sm text-gray-200">{event.summary || event.event_type}</p><p className="text-xs text-gray-600 mt-1">{event.workflow_name} · {new Date(event.created_at).toLocaleString()}</p></div></div>) : <Empty text="Your verified operation history will appear here." />}
           </div>
         </GlassCard>
-      </motion.div>
+        <GlassCard hover={false} className="p-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Control desk</p><h2 className="text-xl text-white mt-1 mb-5">Pending approvals</h2>
+          {approvals.length ? approvals.map(item => <Link to="/dashboard/approvals" key={item.id} className="block rounded-2xl border border-white/8 p-4 mb-3 hover:bg-white/[0.03]"><div className="flex justify-between gap-3"><p className="text-sm text-white capitalize">{item.action_type.replaceAll('_',' ')}</p><span className="text-[10px] uppercase tracking-wider text-amber-300">{item.risk_level}</span></div><p className="text-xs text-gray-500 mt-2">Review before Pandora proceeds.</p></Link>) : <Empty text="Nothing needs your approval." />}
+          <div className="mt-5 rounded-2xl bg-white/[0.03] p-4 flex gap-3"><Sparkles size={16} className="text-gray-400 shrink-0"/><p className="text-xs text-gray-500 leading-relaxed">Reads are automatic. Sends and calendar writes require confirmation. Destructive or financial actions require stronger verification.</p></div>
+        </GlassCard>
+      </section>
     </div>
   );
 }
+
+function Empty({ text }: { text: string }) { return <div className="py-10 text-center text-sm text-gray-600">{text}</div>; }

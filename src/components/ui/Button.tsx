@@ -11,7 +11,6 @@ import { clsx } from 'clsx';
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onAnimationStart' | 'onDragStart' | 'onDrag' | 'onDragEnd'> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'outline';
   size?: 'sm' | 'md' | 'lg';
-  glow?: boolean;
   loading?: boolean;
 }
 
@@ -33,7 +32,7 @@ const sizeStyles = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'primary', size = 'md', glow, loading, className, children, disabled, ...props }, ref) => {
+  ({ variant = 'primary', size = 'md', loading, className, children, disabled, ...props }, ref) => {
     return (
       <motion.button
         ref={ref}

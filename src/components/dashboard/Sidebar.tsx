@@ -9,8 +9,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home,
-  Bot,
-  Store,
   Activity,
   BarChart3,
   Settings,
@@ -18,18 +16,22 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
+  ShieldCheck,
+  PlugZap,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
 import { PlaceholderLogo } from '@/components/ui';
 
 const navItems = [
-  { icon: Home, label: 'Home', path: '/dashboard' },
-  { icon: MessageSquare, label: 'Chat', path: '/dashboard/chat' },
-  { icon: Bot, label: 'My Agents', path: '/dashboard/agents' },
-  { icon: Store, label: 'Agent Store', path: '/dashboard/store' },
+  { icon: Home, label: 'Overview', path: '/dashboard' },
+  { icon: MessageSquare, label: 'Talk to Pandora', path: '/dashboard/chat' },
   { icon: Activity, label: 'Operations', path: '/dashboard/operations' },
-  { icon: BarChart3, label: 'Insights', path: '/dashboard/insights' },
+  { icon: ShieldCheck, label: 'Approvals', path: '/dashboard/approvals' },
+  { icon: PlugZap, label: 'Integrations', path: '/dashboard/integrations' },
+  { icon: BarChart3, label: 'Reports', path: '/dashboard/insights' },
+  { icon: CreditCard, label: 'Billing', path: '/dashboard/billing' },
   { icon: Settings, label: 'Settings', path: '/dashboard/settings' },
 ];
 
@@ -131,7 +133,7 @@ export function Sidebar() {
                   <p className="text-xs font-medium text-white truncate max-w-[140px]">
                     {user?.email || 'founder@pandora.ai'}
                   </p>
-                  <p className="text-[10px] text-gray-500 tracking-wider uppercase mt-0.5">Founder</p>
+                  <p className="text-[10px] text-gray-500 tracking-wider uppercase mt-0.5">Business workspace</p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -171,7 +173,7 @@ export function Sidebar() {
       {/* Mobile bottom navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a] border-t border-white/5 rounded-t-2xl">
         <div className="flex items-center justify-around py-2">
-          {navItems.slice(0, 4).map((item) => {
+          {navItems.slice(0, 5).map((item) => {
             const active = isActive(item.path);
             return (
               <Link

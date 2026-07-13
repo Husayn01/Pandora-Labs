@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PandoraCommand",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId", "correlationId", "organizationId", "role", "channel", "conversationId", "message", "locale", "timezone", "authContext", "entitlementSnapshot"],
+  "properties": {
+    "requestId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "correlationId": { "type": "string", "format": "uuid" },
+    "organizationId": { "type": "string", "format": "uuid" },
+    "actorId": { "type": "string", "format": "uuid" },
+    "role": { "enum": ["public_customer", "owner", "admin", "member", "viewer"] },
+    "channel": { "enum": ["web", "voice", "sms", "telegram", "whatsapp"] },
+    "conversationId": { "type": "string", "format": "uuid" },
+    "message": { "type": "string", "minLength": 1, "maxLength": 8000 },
+    "locale": { "type": "string" },
+    "timezone": { "type": "string" },
+    "authContext": {
+      "type": "object",
+      "required": ["verificationLevel"],
+      "properties": { "verificationLevel": { "enum": ["public", "linked", "otp_verified"] }, "channelIdentityId": { "type": "string", "format": "uuid" } }
+    },
+    "entitlementSnapshot": { "type": "object", "required": ["plan"], "properties": { "plan": { "enum": ["free", "solo", "business", "scale"] } } }
+  }
+}

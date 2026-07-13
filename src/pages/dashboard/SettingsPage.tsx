@@ -1,46 +1,6 @@
-/**
- * Settings Page (Placeholder)
- * ────────────────────────────
- * Will house account settings, API keys, billing, and integrations.
- * TODO: Connect to Supabase user profile and Paystack/Flutterwave billing.
- */
-
-import { motion } from 'framer-motion';
-import { Settings } from 'lucide-react';
-import { GlassCard, PandoraOrb } from '@/components/ui';
-
-export default function SettingsPage() {
-  return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8"
-      >
-        <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Settings</h1>
-        <p className="text-sm text-void-300">
-          Manage your account, integrations, and preferences.
-        </p>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
-        <GlassCard hover={false} className="text-center py-16">
-          <PandoraOrb size="md" className="mx-auto mb-6" />
-          <div className="w-12 h-12 rounded-xl bg-pandora-400/10 border border-pandora-400/20 flex items-center justify-center mx-auto mb-4">
-            <Settings size={24} className="text-pandora-300" />
-          </div>
-          <h2 className="text-lg font-semibold text-white mb-2">Coming Soon</h2>
-          <p className="text-sm text-void-300 max-w-md mx-auto">
-            Account settings, API key management, billing with Paystack/Flutterwave, 
-            and integration configuration will be available here.
-          </p>
-        </GlassCard>
-      </motion.div>
-    </div>
-  );
-}
+import { useEffect, useState, type FormEvent } from 'react';
+import { LockKeyhole, Save, ShieldCheck } from 'lucide-react';
+import { GlassCard } from '@/components/ui';
+import { useWorkspace } from '@/hooks/useWorkspace';
+import { supabase } from '@/lib/supabase';
+export default function SettingsPage(){const {organization,role,refresh}=useWorkspace();const [name,setName]=useState('');const [timezone,setTimezone]=useState('Africa/Lagos');const [saved,setSaved]=useState(false);useEffect(()=>{setName(organization?.name??'');setTimezone(organization?.timezone??'Africa/Lagos')},[organization]);const submit=async(e:FormEvent)=>{e.preventDefault();if(!organization||!['owner','admin'].includes(role??''))return;const {error}=await supabase.from('organizations').update({name:name.trim(),timezone}).eq('id',organization.id);if(!error){setSaved(true);await refresh();setTimeout(()=>setSaved(false),2500)}};return <div className="p-5 md:p-8 max-w-4xl mx-auto"><header className="mb-7"><p className="text-xs uppercase tracking-[.2em] text-gray-500">Workspace controls</p><h1 className="text-3xl text-white mt-2">Settings</h1></header><GlassCard hover={false} className="p-6"><form onSubmit={submit} className="space-y-5"><label className="block"><span className="text-xs text-gray-500">Business name</span><input value={name} onChange={e=>setName(e.target.value)} className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none focus:border-white/25"/></label><label className="block"><span className="text-xs text-gray-500">Primary timezone</span><select value={timezone} onChange={e=>setTimezone(e.target.value)} className="mt-2 w-full rounded-2xl border border-white/10 bg-[#0a0a0a] px-4 py-3 text-white outline-none"><option value="Africa/Lagos">Africa/Lagos</option><option value="UTC">UTC</option><option value="Europe/London">Europe/London</option><option value="America/New_York">America/New_York</option></select></label><button className="inline-flex items-center gap-2 rounded-full bg-white text-black px-5 py-2.5 text-sm font-semibold"><Save size={14}/>{saved?'Saved':'Save workspace'}</button></form></GlassCard><div className="grid md:grid-cols-2 gap-4 mt-5"><GlassCard hover={false} className="p-6"><ShieldCheck size={18}/><h2 className="text-lg text-white mt-5">Privacy</h2><p className="text-sm text-gray-500 mt-2 leading-relaxed">Call audio is disabled by default. Redacted transcripts are retained for 30 days; action summaries and audit records remain available.</p></GlassCard><GlassCard hover={false} className="p-6"><LockKeyhole size={18}/><h2 className="text-lg text-white mt-5">Risk policy</h2><p className="text-sm text-gray-500 mt-2 leading-relaxed">External sends and calendar writes require confirmation. Destructive and financial actions require dashboard approval or OTP.</p></GlassCard></div></div>}

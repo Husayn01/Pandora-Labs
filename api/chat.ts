@@ -1,5 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import crypto from 'node:crypto';
+import { z } from 'zod';
+import type { VercelRequest, VercelResponse } from '../server/vercel-types';
 import {
   createSupabaseAdminClient,
   HttpError,
@@ -7,208 +8,250 @@ import {
   sendError,
   setCorsHeaders,
 } from '../server/api-utils';
+import { resolveTenant } from '../server/tenant';
 
-interface CatalogAgent {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-  category: string;
-  icon: string | null;
-  type: string;
-  capabilities: string[] | null;
-  default_system_prompt: string | null;
+const bodySchema = z.object({
+  message: z.string().trim().min(1).max(8000),
+  conversationId: z.string().uuid().nullable().optional(),
+  organizationId: z.string().uuid().optional(),
+});
+
+const DEFAULT_AGENT_NAME = 'Pandora';
+const DEFAULT_AGENT_ICON = 'Shield';
+
+function parseRequestBody(body: unknown): unknown {
+  if (typeof body !== 'string') return body;
+
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new HttpError(400, 'Request body must be valid JSON.');
+  }
 }
 
-interface UserAgentRecord {
-  id: string;
-  custom_system_prompt: string | null;
-  is_active: boolean;
-  catalog: CatalogAgent | CatalogAgent[] | null;
-}
+function parseWorkflowResponse(body: string): Record<string, unknown> {
+  if (!body) return {};
 
-function getCatalog(catalog: CatalogAgent | CatalogAgent[] | null): CatalogAgent | null {
-  return Array.isArray(catalog) ? catalog[0] ?? null : catalog;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Expected a JSON object.');
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new HttpError(502, 'Pandora workflow returned an invalid response.');
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCorsHeaders(req, res);
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const supabase = createSupabaseAdminClient();
     const { user } = await requireAuthenticatedUser(req, supabase);
-    const { message, conversationId, userId } = req.body as {
-      message?: string;
-      conversationId?: string;
-      userId?: string;
-    };
+    const parsed = bodySchema.safeParse(parseRequestBody(req.body));
+    if (!parsed.success) throw new HttpError(400, 'Invalid command payload.');
 
-    if (!message?.trim()) {
-      throw new HttpError(400, 'Missing message');
+    const tenant = await resolveTenant(supabase, user, parsed.data.organizationId);
+    const idempotencyHeader = req.headers['idempotency-key'];
+    const idempotencyKey =
+      (Array.isArray(idempotencyHeader) ? idempotencyHeader[0] : idempotencyHeader) ||
+      crypto.randomUUID();
+    if (idempotencyKey.length > 128) throw new HttpError(400, 'Invalid idempotency key.');
+
+    const { data: duplicate } = await supabase
+      .from('workflow_events')
+      .select('id')
+      .eq('organization_id', tenant.organizationId)
+      .eq('idempotency_key', `command:${idempotencyKey}`)
+      .maybeSingle();
+    if (duplicate) throw new HttpError(409, 'This command has already been accepted.');
+
+    const { data: reserved, error: quotaError } = await supabase.rpc(
+      'reserve_web_command_usage',
+      {
+        p_organization_id: tenant.organizationId,
+        p_source_id: idempotencyKey,
+        p_period_key: new Date().toISOString().slice(0, 7),
+      },
+    );
+    if (quotaError) throw quotaError;
+    if (!reserved) {
+      throw new HttpError(402, 'Your monthly web command allowance has been used.');
     }
 
-    if (userId && user.id !== userId) {
-      throw new HttpError(401, 'Unauthorized');
-    }
-
-    let activeConversationId = conversationId;
-
-    if (activeConversationId) {
-      const { data: existingConversation, error: conversationLookupError } = await supabase
+    let conversationId = parsed.data.conversationId ?? null;
+    if (conversationId) {
+      const { data } = await supabase
         .from('conversations')
         .select('id')
-        .eq('id', activeConversationId)
-        .eq('user_id', user.id)
+        .eq('id', conversationId)
+        .eq('organization_id', tenant.organizationId)
         .maybeSingle();
-
-      if (conversationLookupError) throw conversationLookupError;
-      if (!existingConversation) throw new HttpError(404, 'Conversation not found');
+      if (!data) throw new HttpError(404, 'Conversation not found.');
     } else {
-      const { data: conv, error: convError } = await supabase
+      const { data, error } = await supabase
         .from('conversations')
         .insert({
+          organization_id: tenant.organizationId,
           user_id: user.id,
-          title: message.trim().substring(0, 50) + (message.trim().length > 50 ? '...' : ''),
+          actor_user_id: user.id,
+          title: parsed.data.message.slice(0, 70),
           channel: 'web',
         })
-        .select()
+        .select('id')
         .single();
-      
-      if (convError) throw convError;
-      activeConversationId = conv.id;
+      if (error) throw error;
+      conversationId = data.id;
     }
 
-    // Save user message
-    const { error: msgError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: activeConversationId,
-        sender_type: 'user',
-        content: message.trim(),
-      });
-      
-    if (msgError) throw msgError;
+    const correlationId = crypto.randomUUID();
+    const { error: messageError } = await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      sender_type: 'user',
+      content: parsed.data.message,
+      metadata: { correlation_id: correlationId },
+    });
+    if (messageError) throw messageError;
 
-    // Fetch user's installed agents
-    const { data: userAgents, error: agentsError } = await supabase
-      .from('user_agents')
-      .select(`
-        id, custom_system_prompt, is_active,
-        catalog:catalog_agent_id (
-          id, slug, name, description, category, icon, type, capabilities, default_system_prompt
-        )
-      `)
-      .eq('user_id', user.id)
-      .eq('is_active', true);
+    const { error: eventError } = await supabase.from('workflow_events').insert({
+      organization_id: tenant.organizationId,
+      actor_user_id: user.id,
+      conversation_id: conversationId,
+      workflow_name: 'Pandora — Handle Command',
+      correlation_id: correlationId,
+      event_type: 'command_received',
+      status: 'info',
+      summary: 'Authenticated web command received.',
+      redacted_payload: { channel: 'web' },
+      idempotency_key: `command:${idempotencyKey}`,
+    });
+    if (eventError) throw eventError;
 
-    if (agentsError) throw agentsError;
-
-    // Format agents for the router prompt
-    const availableAgents = ((userAgents || []) as UserAgentRecord[])
-      .map((ua) => {
-        const catalog = getCatalog(ua.catalog);
-        return {
-          user_agent_id: ua.id,
-          slug: catalog?.slug,
-          name: catalog?.name,
-          description: catalog?.description,
-          capabilities: catalog?.capabilities,
-          icon: catalog?.icon,
-          system_prompt: ua.custom_system_prompt || catalog?.default_system_prompt,
-        };
-      })
-      .filter((agent) => agent.slug && agent.slug !== 'pandora-router');
-
-    if (!process.env.GEMINI_API_KEY) {
-      throw new HttpError(500, 'Gemini API key is not configured.');
+    const webhookUrl = process.env.N8N_PANDORA_COMMAND_WEBHOOK_URL;
+    const webhookSecret = process.env.N8N_PANDORA_WEBHOOK_SECRET;
+    if (!webhookUrl || !webhookSecret) {
+      throw new HttpError(503, 'Pandora operations are not configured yet.');
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    let workflowResponse: Record<string, unknown>;
 
-    // Configure Gemini Router
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
-      systemInstruction: `You are the Pandora Router Agent. Your job is to analyze the user's message and decide which installed specialist agent should handle it.
-      
-Available specialist agents:
-${JSON.stringify(availableAgents, null, 2)}
-
-If the user's request matches an agent's capabilities, route the request to that agent and generate the response AS IF YOU WERE THAT AGENT.
-If no agent matches, or if it's a general conversation, route it to "pandora-router" and answer generally.
-
-You must respond with valid JSON in this exact format:
-{
-  "routed_to_slug": "agent-slug",
-  "reasoning": "Why you chose this agent",
-  "response": "The actual response to the user's message"
-}`
-    });
-
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: message }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-      }
-    });
-
-    const responseText = result.response.text();
-    let routerDecision;
     try {
-      routerDecision = JSON.parse(responseText);
-    } catch (e) {
-      console.error('Failed to parse Gemini JSON:', responseText);
-      routerDecision = {
-        routed_to_slug: 'pandora-router',
-        reasoning: 'Failed to parse routing decision',
-        response: responseText,
-      };
-    }
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Pandora-Webhook-Secret': webhookSecret,
+          'X-Correlation-Id': correlationId,
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify({
+          requestId: idempotencyKey,
+          correlationId,
+          organizationId: tenant.organizationId,
+          actorId: user.id,
+          role: tenant.role,
+          channel: 'web',
+          conversationId,
+          message: parsed.data.message,
+          locale: tenant.locale,
+          timezone: tenant.timezone,
+          authContext: { verificationLevel: 'linked' },
+          entitlementSnapshot: { plan: tenant.plan },
+        }),
+      });
+      const responseText = await response.text();
+      workflowResponse = parseWorkflowResponse(responseText);
+      if (!response.ok) {
+        throw new HttpError(
+          response.status >= 500 ? 502 : response.status,
+          String(workflowResponse.error || 'Pandora workflow failed.'),
+        );
+      }
+    } catch (error) {
+      const summary =
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'Pandora workflow timed out.'
+          : error instanceof HttpError
+            ? error.message
+            : 'Pandora workflow request failed.';
 
-    // Find matched agent
-    const matchedAgent = availableAgents.find(a => a.slug === routerDecision.routed_to_slug);
-    
-    let userAgentId = null;
-    let agentName = 'Pandora Router';
-    let agentIcon = 'Shield';
-
-    if (matchedAgent) {
-      userAgentId = matchedAgent.user_agent_id;
-      agentName = matchedAgent.name || agentName;
-      agentIcon = matchedAgent.icon || agentIcon;
-
-      // Increment messages handled for this agent
-      await supabase.rpc('increment_messages_handled', { row_id: userAgentId });
-    }
-
-    // Save agent response
-    const { error: replyError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: activeConversationId,
-        user_agent_id: userAgentId,
-        sender_type: 'agent',
-        content: routerDecision.response,
+      await supabase.from('workflow_events').insert({
+        organization_id: tenant.organizationId,
+        actor_user_id: user.id,
+        conversation_id: conversationId,
+        workflow_name: 'Pandora — Handle Command',
+        correlation_id: correlationId,
+        event_type: 'command_failed',
+        status: 'error',
+        summary,
+        redacted_payload: { channel: 'web' },
+        idempotency_key: `failed:${idempotencyKey}`,
       });
 
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new HttpError(504, 'Pandora workflow timed out.');
+      }
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(502, 'Pandora workflow request failed.');
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    const reply = String(
+      workflowResponse.reply ||
+        workflowResponse.response ||
+        workflowResponse.message ||
+        'Pandora completed the operation but returned no message.',
+    );
+    const routedTo = String(
+      workflowResponse.routedTo || workflowResponse.routed_to || 'pandora-core',
+    );
+    const executionId = workflowResponse.executionId || workflowResponse.execution_id;
+
+    const { error: replyError } = await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      sender_type: 'agent',
+      content: reply,
+      metadata: { correlation_id: correlationId, execution_id: executionId ?? null },
+    });
     if (replyError) throw replyError;
 
-    return res.status(200).json({ 
-      reply: routerDecision.response,
-      routedTo: routerDecision.routed_to_slug,
-      reasoning: routerDecision.reasoning,
-      agentName,
-      agentIcon,
-      conversationId: activeConversationId
+    await supabase.from('workflow_events').insert({
+      organization_id: tenant.organizationId,
+      actor_user_id: user.id,
+      conversation_id: conversationId,
+      workflow_name: 'Pandora — Handle Command',
+      execution_id: executionId ? String(executionId) : null,
+      correlation_id: correlationId,
+      event_type: 'command_completed',
+      status: 'success',
+      summary: `Command routed to ${routedTo}.`,
+      redacted_payload: { channel: 'web', routedTo },
+      idempotency_key: `completed:${idempotencyKey}`,
     });
 
+    return res.status(200).json({
+      reply,
+      routedTo,
+      reasoning: String(
+        workflowResponse.reasoning || 'Handled by the shared Pandora workflow.',
+      ),
+      agentName: String(
+        workflowResponse.agentName || workflowResponse.agent_name || DEFAULT_AGENT_NAME,
+      ),
+      agentIcon: String(
+        workflowResponse.agentIcon || workflowResponse.agent_icon || DEFAULT_AGENT_ICON,
+      ),
+      conversationId,
+      actions: workflowResponse.actions,
+      executionId,
+    });
   } catch (error) {
     return sendError(res, error);
   }

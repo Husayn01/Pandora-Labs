@@ -24,8 +24,8 @@ export default function SignUpPage() {
     setError('');
     setLoading(true);
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 10) {
+      setError('Use at least 10 characters for your password');
       setLoading(false);
       return;
     }
@@ -41,7 +41,9 @@ export default function SignUpPage() {
   };
 
   const handleGoogleSignIn = async () => {
-    await signInWithGoogle();
+    setError('');
+    const { error } = await signInWithGoogle();
+    if (error) setError(error.message);
   };
 
   return (
@@ -149,7 +151,7 @@ export default function SignUpPage() {
                   <Input
                     label="Password"
                     type="password"
-                    placeholder="Min. 6 characters"
+                    placeholder="At least 10 characters"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -168,7 +170,7 @@ export default function SignUpPage() {
                 </form>
 
                 <p className="text-xs text-gray-500 text-center font-light pt-2">
-                  By signing up, you agree to our Terms and Privacy Policy.
+                  By signing up, you agree to Pandora Labs' account and data-use policies.
                 </p>
               </>
             )}
@@ -188,8 +190,8 @@ export default function SignUpPage() {
       {/* Right Image Side */}
       <div className="hidden lg:block lg:w-1/2 relative bg-black">
         <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-transparent to-transparent z-10" />
-        <img 
-          src="/images/dashboard_banner.png" 
+        <img
+          src="/images/dashboard_banner.png"
           alt="Pandora AI"
           className="absolute inset-0 w-full h-full object-cover object-center mix-blend-lighten grayscale opacity-80"
         />
