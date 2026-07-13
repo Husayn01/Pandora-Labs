@@ -11,6 +11,7 @@
     "actorId": { "type": "string", "format": "uuid" },
     "role": { "enum": ["owner", "admin", "member", "viewer"] },
     "channel": { "enum": ["voice"] },
+    "sourceChannel": { "enum": ["phone", "web_voice"] },
     "conversationId": { "type": "string", "minLength": 1, "maxLength": 128 },
     "callSid": { "type": "string", "maxLength": 128 },
     "tool": { "enum": ["get_business_context", "prepare_action", "check_calendar_availability", "create_email_draft", "create_calendar_draft", "confirm_action", "get_action_status"] },
