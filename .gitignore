@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 .codex/
+.playwright-cli/
+playwright-report/
+test-results/
 
 # Environment variables
 .env
