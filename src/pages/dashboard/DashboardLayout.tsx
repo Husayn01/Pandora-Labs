@@ -1,12 +1,4 @@
-/**
- * Dashboard Layout
- * ─────────────────
- * Protected layout wrapper with sidebar navigation.
- * All dashboard pages render inside this layout.
- * Redirects unauthenticated users to /login.
- */
-
-import { Outlet, Navigate } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { PlaceholderLogo } from '@/components/ui';
@@ -14,27 +6,17 @@ import { PlaceholderLogo } from '@/components/ui';
 export default function DashboardLayout() {
   const { user, loading } = useAuth();
 
-  // Show loading state while checking auth
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
-        <div className="text-center">
-          <PlaceholderLogo size={56} className="mx-auto mb-4 animate-pulse" />
-          <p className="text-sm text-gray-500 animate-pulse font-light">Loading Pandora...</p>
-        </div>
-      </div>
-    );
+    return <div className="grid min-h-screen place-items-center bg-[#050505]"><div className="text-center"><PlaceholderLogo size={48} className="mx-auto animate-pulse" /><p className="mt-4 text-sm text-white/35">Opening your workspace…</p></div></div>;
   }
 
-  // Redirect to login if not authenticated
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-[#050505] text-white">
+      <a href="#dashboard-content" className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black focus:translate-y-0">Skip to dashboard content</a>
       <Sidebar />
-      <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+      <main id="dashboard-content" className="min-w-0 flex-1 overflow-x-hidden pb-24 md:pb-0">
         <Outlet />
       </main>
     </div>

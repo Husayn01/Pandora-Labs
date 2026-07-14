@@ -12,9 +12,9 @@ import {
 import { canManageWorkspace, resolveTenant } from '../../server/tenant';
 
 const plans = {
-  solo: { amount: 2_990_000, env: 'PAYSTACK_SOLO_PLAN_CODE' },
-  business: { amount: 7_990_000, env: 'PAYSTACK_BUSINESS_PLAN_CODE' },
-  scale: { amount: 19_990_000, env: 'PAYSTACK_SCALE_PLAN_CODE' },
+  solo: { env: 'PAYSTACK_SOLO_PLAN_CODE' },
+  business: { env: 'PAYSTACK_BUSINESS_PLAN_CODE' },
+  scale: { env: 'PAYSTACK_SCALE_PLAN_CODE' },
 } as const;
 
 type PaystackInitializeResponse = {
@@ -50,13 +50,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const selected = plans[parsed.data.planCode];
     const plan = process.env[selected.env];
     if (!plan) throw new HttpError(503, 'This billing plan is not configured.');
+    const { data: entitlement, error: entitlementError } = await supabase
+      .from('plan_entitlements')
+      .select('monthly_price_minor')
+      .eq('plan_code', parsed.data.planCode)
+      .single();
+    if (entitlementError || !entitlement || Number(entitlement.monthly_price_minor) <= 0) {
+      throw new HttpError(503, 'This plan does not have a valid billable price.');
+    }
     const reference = `PAN-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: user.email,
-        amount: selected.amount,
+        amount: Number(entitlement.monthly_price_minor),
         currency: 'NGN',
         plan,
         reference,

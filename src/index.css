@@ -154,6 +154,10 @@
     color: #166534;
     background-color: #edf9f0;
   }
+
+  .field-control {
+    @apply mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/20 focus:border-white/25;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

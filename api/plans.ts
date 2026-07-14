@@ -5,9 +5,9 @@ import { launchPlanCatalog, type PublicPlan } from '../src/lib/plan-catalog';
 type EntitlementRow = {
   plan_code: string;
   monthly_price_minor: number;
-  seat_limit: number;
-  web_command_limit: number;
-  web_voice_seconds_limit: number;
+  seat_limit: number | null;
+  web_command_limit: number | null;
+  web_voice_seconds_limit: number | null;
   features: unknown;
 };
 
@@ -29,12 +29,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!['free', 'solo', 'business', 'scale'].includes(row.plan_code)) return [];
       const fallback = defaults.get(row.plan_code as PublicPlan['code']);
       if (!fallback) return [];
+      const features = row.features && typeof row.features === 'object' && !Array.isArray(row.features) ? row.features as Record<string, unknown> : {};
       return [{
         ...fallback,
         monthlyPriceMinor: Number(row.monthly_price_minor),
         seatLimit: row.plan_code === 'scale' ? null : Number(row.seat_limit),
         actionCredits: row.plan_code === 'scale' ? null : Number(row.web_command_limit),
         webVoiceMinutes: row.plan_code === 'scale' ? null : Math.floor(Number(row.web_voice_seconds_limit) / 60),
+        auditDays: typeof features.audit_days === 'number' ? features.audit_days : fallback.auditDays,
       }];
     });
 
