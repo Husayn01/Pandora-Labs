@@ -8,14 +8,15 @@ afterEach(cleanup);
 describe('voice-first landing page', () => {
   it('presents the product and free entry point', () => {
     render(<MemoryRouter><LandingPage /></MemoryRouter>);
-    expect(screen.getByRole('heading', { name: /Your businesscan answer back/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Run the work.*Just say it/i })).toBeInTheDocument();
     expect(screen.getAllByText(/Start free/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/ordinary phone call/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /No app.*No mobile data.*Just a call/i })).toBeInTheDocument();
   });
 
   it('states the safety boundary', () => {
     render(<MemoryRouter><LandingPage /></MemoryRouter>);
-    expect(screen.getAllByText(/Every action leaves evidence/i)).toHaveLength(1);
-    expect(screen.getByText(/never sent through n8n or an LLM/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Helpful without being reckless/i })).toBeInTheDocument();
+    expect(screen.getByText(/credentials stay encrypted in Supabase Vault/i)).toBeInTheDocument();
+    expect(screen.getByText(/require an exact preview and explicit confirmation/i)).toBeInTheDocument();
   });
 });

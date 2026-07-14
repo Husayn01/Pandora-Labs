@@ -1,35 +1,338 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowRight, CalendarCheck2, Check, FileText, Mail, Menu, Mic, Phone, Receipt, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import {
+  ArrowRight,
+  BadgeCheck,
+  CalendarCheck2,
+  Check,
+  FileText,
+  Headphones,
+  Mail,
+  Menu,
+  Phone,
+  Receipt,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
+import { OperationsConsole } from '@/components/landing/OperationsConsole';
+import { OperationWalkthrough } from '@/components/landing/OperationWalkthrough';
+import { PricingSection } from '@/components/landing/PricingSection';
 import { PlaceholderLogo } from '@/components/ui';
 
-const capabilities=[
- {icon:Mail,title:'Email operations',copy:'Find messages, prepare replies and send only after you approve the exact recipient and content.'},
- {icon:CalendarCheck2,title:'Scheduling',copy:'Capture attendee emails, timezone, duration and conflicts before creating a Google Meet.'},
- {icon:Phone,title:'Phone access',copy:'Reach Pandora from an ordinary phone—even when you do not have mobile data or a smartphone.'},
- {icon:Receipt,title:'Invoices and reports',copy:'Draft invoices, payment reminders and bookkeeping summaries without silently moving money.'},
- {icon:FileText,title:'Business knowledge',copy:'Answer customer questions from the knowledge base configured for your organization.'},
- {icon:ShieldCheck,title:'Human control',copy:'Every risky action is previewed, confirmed and written to an audit trail in your dashboard.'},
+const problems = [
+  {
+    index: '01',
+    icon: Phone,
+    title: 'Calls are where opportunities disappear',
+    copy: 'Customers call while you are busy, follow-ups get delayed, and important details are left in someone’s memory.',
+    tone: 'blue',
+  },
+  {
+    index: '02',
+    icon: Mail,
+    title: 'Your inbox has become an operating system',
+    copy: 'Bookings, requests, receipts, reminders, and decisions are scattered across threads that no one has time to organize.',
+    tone: 'amber',
+  },
+  {
+    index: '03',
+    icon: Receipt,
+    title: 'The work after the conversation is still manual',
+    copy: 'Meetings, payment reminders, invoice drafts, and reporting all need another person to push them forward.',
+    tone: 'green',
+  },
 ];
-const plans=[['Free','₦0','Web chat, 15 web-voice minutes, tasks and reminders'],['Solo','₦29,900','Google Workspace actions, 100 voice minutes and reports'],['Business','₦79,900','Team approvals, 400 voice minutes and messaging channels'],['Scale','₦199,900','Dedicated SIP onboarding, 1,200 minutes and priority support']];
 
-export default function LandingPage(){const [menu,setMenu]=useState(false);const [step,setStep]=useState(0);const demo=[['You','Schedule a Google Meet with Amina next Tuesday afternoon.'],['Pandora','What email address should I invite, and should I use 2:00 PM Africa/Lagos?'],['You','amina@acme.ng. Yes, make it 30 minutes.'],['Pandora','I found no conflict. Shall I create “Meeting with Amina” for Tuesday at 2:00 PM and invite amina@acme.ng?']];return <div className="min-h-screen bg-[#050505] text-white overflow-hidden"><nav className="fixed top-0 inset-x-0 z-50 border-b border-white/6 bg-black/70 backdrop-blur-xl"><div className="max-w-7xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between"><Link to="/" className="flex items-center gap-3"><PlaceholderLogo size={33}/><span className="font-semibold tracking-tight">Pandora <span className="text-gray-500">Labs</span></span></Link><div className="hidden md:flex items-center gap-7 text-sm text-gray-400"><a href="#capabilities" className="hover:text-white">What it does</a><a href="#trust" className="hover:text-white">Trust</a><a href="#pricing" className="hover:text-white">Pricing</a><Link to="/login" className="hover:text-white">Sign in</Link><Link to="/signup" className="rounded-full bg-white text-black px-5 py-2.5 font-semibold">Start free</Link></div><button className="md:hidden" onClick={()=>setMenu(!menu)}>{menu?<X/>:<Menu/>}</button></div>{menu&&<div className="md:hidden border-t border-white/5 px-5 py-5 space-y-4 bg-black"><a href="#capabilities" onClick={()=>setMenu(false)} className="block text-gray-300">What it does</a><a href="#pricing" onClick={()=>setMenu(false)} className="block text-gray-300">Pricing</a><Link to="/signup" className="block rounded-full bg-white text-black px-5 py-3 text-center font-semibold">Start free</Link></div>}</nav>
+const capabilities = [
+  { icon: Mail, title: 'Email operations', copy: 'Find messages, prepare replies, and send only after the exact recipient and content are confirmed.' },
+  { icon: CalendarCheck2, title: 'Scheduling', copy: 'Collect attendee emails, timezone, duration, meeting mode, and conflict policy before creating an event.' },
+  { icon: Phone, title: 'Phone access', copy: 'Reach Pandora from an ordinary telephone without mobile data. Pandora itself remains securely cloud-powered.' },
+  { icon: Receipt, title: 'Invoices and reports', copy: 'Draft invoices, payment reminders, and operational summaries without silently moving money.' },
+  { icon: FileText, title: 'Business knowledge', copy: 'Answer public and operator questions from a tenant-isolated, citation-bearing knowledge base.' },
+  { icon: ShieldCheck, title: 'Human control', copy: 'Every risky action is previewed, confirmed, permission-checked, and written to an audit trail.' },
+];
 
-<main><section className="relative min-h-[92vh] flex items-center pt-24"><div className="absolute inset-0 bg-[radial-gradient(circle_at_68%_35%,rgba(255,255,255,.09),transparent_27%)]"/><img src="/images/hero_character.png" alt="Pandora voice agent" className="absolute right-[-8%] bottom-0 w-[65%] max-w-[880px] h-[86%] object-contain object-bottom grayscale opacity-50 mix-blend-lighten hidden lg:block"/><div className="relative max-w-7xl mx-auto px-5 md:px-8 w-full"><div className="max-w-3xl"><div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.03] px-4 py-2 text-xs text-gray-400"><Sparkles size={13}/> Voice-first business operations, built for Nigeria</div><h1 className="mt-7 text-[clamp(3.3rem,8vw,7.5rem)] font-light tracking-[-.065em] leading-[.88]">Your business<br/><span className="text-gray-500">can answer back.</span></h1><p className="mt-7 max-w-xl text-base md:text-lg leading-relaxed text-gray-400">Pandora answers customers, schedules meetings, handles email, prepares invoices and keeps you in control—from the web or an ordinary phone call.</p><div className="mt-8 flex flex-wrap gap-3"><Link to="/signup" className="inline-flex items-center gap-2 rounded-full bg-white text-black px-6 py-3.5 text-sm font-semibold">Build your workspace <ArrowRight size={16}/></Link><a href="#demo" className="inline-flex items-center gap-2 rounded-full border border-white/15 px-6 py-3.5 text-sm text-white"><Mic size={16}/> See a call unfold</a></div><p className="mt-5 text-xs text-gray-600">No card required. Free web voice included. Phone access is cloud-powered and works without mobile data.</p></div></div></section>
+const safeguards = [
+  'Tenant credentials stay encrypted in Supabase Vault and never enter a prompt.',
+  'Public callers can ask questions and request bookings, but cannot access private operations.',
+  'Email sends and calendar writes require an exact preview and explicit confirmation.',
+  'Call audio is off by default; redacted transcripts expire after 30 days.',
+];
 
-<section className="border-y border-white/6 bg-[#080808]"><div className="max-w-7xl mx-auto px-5 md:px-8 py-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center"><Proof value="One agent" label="Across web and phone"/><Proof value="One workflow" label="Across every customer"/><Proof value="Human approval" label="Before risky actions"/><Proof value="Supabase" label="For the full audit trail"/></div></section>
+export default function LandingPage() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
 
-<section id="demo" className="max-w-7xl mx-auto px-5 md:px-8 py-24 md:py-32 grid lg:grid-cols-[.8fr_1.2fr] gap-12 items-center"><div><p className="eyebrow">Intelligent clarification</p><h2 className="section-title">It knows when not to guess.</h2><p className="section-copy">Names, email addresses and Nigerian date expressions can be ambiguous. Pandora asks one useful question at a time, reads the final action back, then waits for confirmation.</p><button onClick={()=>setStep((step+1)%demo.length)} className="mt-7 rounded-full border border-white/15 px-5 py-3 text-sm hover:bg-white/5">Advance conversation</button></div><div className="rounded-[30px] border border-white/10 bg-[#090909] p-5 md:p-7 shadow-2xl"><div className="flex items-center justify-between border-b border-white/6 pb-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center"><Mic size={17}/></div><div><p className="text-sm">Pandora phone session</p><p className="text-xs text-emerald-400 mt-1">Listening securely</p></div></div><span className="text-xs text-gray-600">02:14</span></div><div className="py-6 space-y-4 min-h-[360px]">{demo.slice(0,step+1).map(([speaker,text],i)=><motion.div key={i} initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} className={`max-w-[85%] rounded-2xl p-4 text-sm leading-relaxed ${speaker==='You'?'ml-auto bg-white text-black rounded-br-sm':'bg-white/[.04] border border-white/8 text-gray-300 rounded-bl-sm'}`}><p className={`text-[10px] uppercase tracking-wider mb-2 ${speaker==='You'?'text-black/50':'text-gray-600'}`}>{speaker}</p>{text}</motion.div>)}</div><div className="rounded-2xl bg-amber-400/5 border border-amber-300/10 p-4 flex gap-3"><ShieldCheck size={16} className="text-amber-300 shrink-0"/><p className="text-xs text-gray-400">No calendar event exists until the owner confirms the complete preview.</p></div></div></section>
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [menuOpen]);
 
-<section id="capabilities" className="bg-[#080808] border-y border-white/6 py-24 md:py-32"><div className="max-w-7xl mx-auto px-5 md:px-8"><p className="eyebrow">One operating layer</p><div className="flex flex-col md:flex-row md:items-end justify-between gap-6"><h2 className="section-title max-w-3xl">The work around the work,<br/>handled by voice.</h2><p className="section-copy max-w-md">ElevenLabs carries the conversation. n8n coordinates the operation. Supabase keeps the durable record.</p></div><div className="mt-14 grid md:grid-cols-2 lg:grid-cols-3 gap-px bg-white/8 border border-white/8 rounded-[28px] overflow-hidden">{capabilities.map(item=><div key={item.title} className="bg-[#080808] p-7 md:p-8 min-h-60"><item.icon size={20} className="text-gray-400"/><h3 className="text-xl mt-12">{item.title}</h3><p className="text-sm text-gray-500 leading-relaxed mt-3">{item.copy}</p></div>)}</div></div></section>
+  return (
+    <div className="min-h-screen overflow-hidden bg-[#050505] text-white">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#050505]/95">
+        <nav aria-label="Primary navigation" className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-5 md:px-8 xl:px-12">
+          <Link to="/" className="flex items-center gap-3" aria-label="Pandora Labs home">
+            <PlaceholderLogo size={34} />
+            <span className="text-sm font-semibold tracking-[-0.02em]">Pandora <span className="text-white/45">Labs</span></span>
+          </Link>
+          <div className="hidden items-center gap-8 text-sm text-white/55 md:flex">
+            <a href="#how-it-works" className="transition-colors hover:text-white">How it works</a>
+            <a href="#capabilities" className="transition-colors hover:text-white">Capabilities</a>
+            <a href="#trust" className="transition-colors hover:text-white">Trust</a>
+            <a href="#pricing" className="transition-colors hover:text-white">Pricing</a>
+          </div>
+          <div className="hidden items-center gap-3 md:flex">
+            <Link to="/login" className="px-3 py-2 text-sm text-white/60 transition-colors hover:text-white">Sign in</Link>
+            <Link to="/signup" className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition-transform hover:-translate-y-0.5">
+              Start free <ArrowRight size={15} />
+            </Link>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((value) => !value)}
+            className="grid h-11 w-11 place-items-center rounded-xl border border-white/10 md:hidden"
+            aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <X size={19} /> : <Menu size={19} />}
+          </button>
+        </nav>
+        {menuOpen && (
+          <div className="border-t border-white/10 bg-[#080808] px-5 py-5 md:hidden">
+            <div className="space-y-1">
+              {[
+                ['How it works', '#how-it-works'],
+                ['Capabilities', '#capabilities'],
+                ['Trust', '#trust'],
+                ['Pricing', '#pricing'],
+              ].map(([label, href]) => (
+                <a key={href} href={href} onClick={() => setMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm text-white/70 hover:bg-white/5 hover:text-white">{label}</a>
+              ))}
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/10 pt-4">
+              <Link to="/login" className="rounded-xl border border-white/10 px-4 py-3 text-center text-sm">Sign in</Link>
+              <Link to="/signup" className="rounded-xl bg-white px-4 py-3 text-center text-sm font-semibold text-black">Start free</Link>
+            </div>
+          </div>
+        )}
+      </header>
 
-<section id="trust" className="max-w-7xl mx-auto px-5 md:px-8 py-24 md:py-32 grid lg:grid-cols-2 gap-14 items-center"><div className="relative rounded-[32px] overflow-hidden border border-white/8 min-h-[520px]"><img src="/images/section_character.png" alt="Pandora security and trust" className="absolute inset-0 w-full h-full object-cover grayscale opacity-55"/><div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent"/><div className="absolute bottom-0 p-8"><p className="text-sm text-gray-400">Security is a product feature.</p><p className="text-3xl font-light mt-2">Every action leaves evidence.</p></div></div><div><p className="eyebrow">Trust by architecture</p><h2 className="section-title">Helpful without being reckless.</h2><div className="mt-8 space-y-5">{['Tenant credentials are encrypted and never sent through n8n or an LLM.','Public callers get Q&A and booking—not access to private operations.','External sends and calendar writes require an exact confirmation.','Audio retention is off by default; redacted transcripts expire after 30 days.'].map(t=><div key={t} className="flex gap-3"><div className="w-6 h-6 rounded-full border border-white/15 flex items-center justify-center shrink-0"><Check size={12}/></div><p className="text-sm text-gray-400 leading-relaxed">{t}</p></div>)}</div></div></section>
+      <main>
+        <section className="border-b border-white/10 pt-[72px]">
+          <div className="mx-auto grid min-h-[760px] max-w-[1440px] lg:grid-cols-[0.88fr_1.12fr]">
+            <div className="flex items-center border-white/10 px-5 py-20 md:px-8 lg:border-r lg:px-12 xl:px-16">
+              <motion.div
+                className="max-w-[680px]"
+                initial={reduceMotion ? false : { opacity: 0, y: 28 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/12 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-white/55">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Voice-first business operations
+                </div>
+                <h1 className="mt-7 max-w-[760px] text-[clamp(4rem,8vw,8.5rem)] font-medium leading-[0.83] tracking-[-0.075em]">
+                  Run the work.<br /><span className="text-white/38">Just say it.</span>
+                </h1>
+                <p className="mt-8 max-w-[600px] text-base leading-7 text-white/55 md:text-lg">
+                  Pandora handles email, schedules meetings, follows up, drafts invoices, and keeps an audit trail—from the web or an ordinary phone.
+                </p>
+                <div className="mt-9 flex flex-wrap gap-3">
+                  <Link to="/signup" className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-black transition-transform hover:-translate-y-0.5">
+                    Start free <ArrowRight size={16} />
+                  </Link>
+                  <a href="#how-it-works" className="inline-flex items-center gap-2 rounded-xl border border-white/14 px-6 py-3.5 text-sm text-white/85 transition-colors hover:border-white/30 hover:bg-white/5">
+                    <Headphones size={16} /> Hear Pandora work
+                  </a>
+                </div>
+                <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-xs text-white/35">
+                  <span>No card required</span>
+                  <span>15 web-voice minutes</span>
+                  <span>Human approval built in</span>
+                </div>
+              </motion.div>
+            </div>
+            <motion.div
+              className="flex items-center bg-[#080808] px-5 py-12 md:px-8 lg:px-10 xl:px-14"
+              initial={reduceMotion ? false : { opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.75, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <OperationsConsole />
+            </motion.div>
+          </div>
+        </section>
 
-<section id="pricing" className="bg-[#080808] border-y border-white/6 py-24 md:py-32"><div className="max-w-7xl mx-auto px-5 md:px-8"><div className="text-center max-w-2xl mx-auto"><p className="eyebrow">Simple NGN pricing</p><h2 className="section-title">Start useful. Pay when Pandora works harder.</h2><p className="section-copy">The free plan is generous on the web. Expensive outbound phone calls use transparent prepaid credit.</p></div><div className="mt-14 grid md:grid-cols-2 xl:grid-cols-4 gap-4">{plans.map(([name,price,copy],i)=><div key={name} className={`rounded-[26px] border p-6 ${i===1?'border-white/25 bg-white/[.04]':'border-white/8 bg-[#0b0b0b]'}`}><p className="text-sm text-gray-400">{name}</p><p className="text-3xl mt-5">{price}<span className="text-xs text-gray-600"> / mo</span></p><p className="text-sm text-gray-500 leading-relaxed mt-5 min-h-20">{copy}</p><Link to="/signup" className={`mt-6 w-full inline-flex justify-center rounded-full px-4 py-3 text-sm font-semibold ${i===1?'bg-white text-black':'border border-white/12 text-white'}`}>{i===0?'Start free':'Choose '+name}</Link></div>)}</div></div></section>
+        <section aria-label="Available channels" className="border-b border-white/10 bg-[#080808]">
+          <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-8 xl:px-12">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">One agent, every conversation</p>
+            <div className="flex flex-wrap gap-2">
+              <ChannelBadge label="Web" state="Live" tone="green" />
+              <ChannelBadge label="Telephone" state="Live" tone="blue" />
+              <ChannelBadge label="SMS" state="Next" tone="neutral" />
+              <ChannelBadge label="WhatsApp" state="After onboarding" tone="neutral" />
+              <ChannelBadge label="Telegram" state="After onboarding" tone="neutral" />
+            </div>
+          </div>
+        </section>
 
-<section className="max-w-5xl mx-auto px-5 md:px-8 py-24 md:py-36 text-center"><p className="eyebrow">Pandora Labs</p><h2 className="text-5xl md:text-7xl font-light tracking-[-.055em]">Give your business<br/>a voice people can reach.</h2><p className="section-copy max-w-xl mx-auto">Start on the web, connect Google Workspace securely, then graduate to phone and messaging channels as your business grows.</p><Link to="/signup" className="mt-8 inline-flex items-center gap-2 rounded-full bg-white text-black px-7 py-4 font-semibold">Create your free workspace <ArrowRight size={16}/></Link></section></main>
+        <section className="bg-[#ededeb] text-[#111214]">
+          <div className="mx-auto max-w-[1180px] px-5 py-24 md:px-8 md:py-32">
+            <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-black/45">The operational gap</p>
+            <h2 className="mt-5 max-w-[920px] text-4xl font-semibold leading-[1.02] tracking-[-0.055em] md:text-6xl">
+              Your business does not need another chatbot. It needs the follow-through.
+            </h2>
+            <div className="mt-14 grid overflow-hidden rounded-[22px] border border-black/12 md:grid-cols-3">
+              {problems.map((problem, index) => (
+                <motion.article
+                  key={problem.index}
+                  whileHover={reduceMotion ? undefined : { y: -6 }}
+                  transition={{ duration: 0.22 }}
+                  className={`min-h-[390px] bg-white p-6 md:p-7 ${index > 0 ? 'border-t border-black/12 md:border-l md:border-t-0' : ''}`}
+                >
+                  <div className={`problem-visual problem-visual-${problem.tone}`}>
+                    <problem.icon size={23} />
+                    <div>
+                      <span className="block text-[9px] uppercase tracking-[0.18em] opacity-55">Open item</span>
+                      <span className="mt-1 block text-sm font-medium">{problem.title.split(' ').slice(0, 3).join(' ')}</span>
+                    </div>
+                  </div>
+                  <p className="mt-8 font-mono text-xs text-black/40">{problem.index}</p>
+                  <h3 className="mt-4 text-xl font-semibold leading-tight tracking-[-0.035em]">{problem.title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-black/58">{problem.copy}</p>
+                </motion.article>
+              ))}
+            </div>
+          </div>
+        </section>
 
-<footer className="border-t border-white/6"><div className="max-w-7xl mx-auto px-5 md:px-8 py-8 flex flex-col md:flex-row gap-4 items-center justify-between"><div className="flex items-center gap-2"><PlaceholderLogo size={27}/><span className="text-sm">Pandora Labs</span></div><p className="text-xs text-gray-600">Cloud-powered voice operations for accessible Nigerian business.</p><div className="flex gap-5 text-xs text-gray-500"><a href="mailto:hello@pandoralabs.ai">Contact</a><Link to="/login">Sign in</Link></div></div></footer></div>}
+        <section id="how-it-works" className="border-y border-white/10 bg-[#080808]">
+          <div className="mx-auto max-w-[1440px] px-5 py-24 md:px-8 md:py-32 xl:px-12">
+            <div className="grid gap-8 lg:grid-cols-[0.72fr_1.28fr] lg:items-end">
+              <div>
+                <p className="eyebrow">A safer operating loop</p>
+                <h2 className="section-title max-w-xl">Useful because it knows when to stop.</h2>
+              </div>
+              <p className="max-w-xl text-base leading-7 text-white/48 lg:justify-self-end">
+                Pandora collects the missing details, shows the exact action, and waits for the right level of confirmation before anything leaves your business.
+              </p>
+            </div>
+            <OperationWalkthrough />
+          </div>
+        </section>
 
-function Proof({value,label}:{value:string;label:string}){return <div><p className="text-sm text-white">{value}</p><p className="text-[11px] text-gray-600 mt-1">{label}</p></div>}
+        <section id="capabilities" className="border-b border-white/10 bg-[#050505]">
+          <div className="mx-auto max-w-[1440px] px-5 py-24 md:px-8 md:py-32 xl:px-12">
+            <div className="grid gap-8 lg:grid-cols-2 lg:items-end">
+              <div>
+                <p className="eyebrow">The work around the work</p>
+                <h2 className="section-title max-w-3xl">One conversation can move the whole operation forward.</h2>
+              </div>
+              <p className="max-w-lg text-sm leading-6 text-white/45 lg:justify-self-end">
+                ElevenLabs carries the conversation. n8n coordinates the operation. Supabase protects the durable record.
+              </p>
+            </div>
+            <div className="mt-14 grid overflow-hidden rounded-[22px] border border-white/10 sm:grid-cols-2 lg:grid-cols-3">
+              {capabilities.map((item, index) => (
+                <motion.article
+                  key={item.title}
+                  whileHover={reduceMotion ? undefined : { backgroundColor: '#0d0d0d' }}
+                  transition={{ duration: 0.2 }}
+                  className={`min-h-[260px] bg-[#080808] p-7 ${index % 3 !== 0 ? 'lg:border-l lg:border-white/10' : ''} ${index > 2 ? 'border-t border-white/10' : index > 1 ? 'sm:border-t sm:border-white/10 lg:border-t-0' : index > 0 ? 'sm:border-l sm:border-white/10 lg:border-l-0' : ''}`}
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-white/65"><item.icon size={18} /></div>
+                  <h3 className="mt-12 text-xl font-medium tracking-[-0.03em]">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-white/42">{item.copy}</p>
+                </motion.article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-white/10 bg-[#080808]">
+          <div className="mx-auto grid max-w-[1440px] lg:grid-cols-2">
+            <div className="border-white/10 px-5 py-20 md:px-8 lg:border-r lg:px-12 xl:px-16">
+              <p className="eyebrow">Phone accessible</p>
+              <h2 className="section-title max-w-xl">No app. No mobile data. Just a call.</h2>
+              <p className="mt-6 max-w-lg text-base leading-7 text-white/48">
+                A customer or verified operator can reach Pandora from an ordinary telephone. The experience works without mobile data on the caller’s device; Pandora remains cloud-powered and securely connected to approved business systems.
+              </p>
+              <div className="mt-9 space-y-3">
+                {['Public Q&A and booking without exposing private operations', 'Verified operator access through web onboarding and OTP', 'A full dashboard record after the call ends'].map((item) => (
+                  <p key={item} className="flex gap-3 text-sm text-white/62"><BadgeCheck size={17} className="mt-0.5 shrink-0 text-blue-300" />{item}</p>
+                ))}
+              </div>
+            </div>
+            <div className="relative min-h-[520px] overflow-hidden">
+              <img
+                src="/images/pandora-founder-editorial.png"
+                alt="Nigerian business owner using Pandora after hours"
+                width={972}
+                height={1619}
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover object-[58%_30%]"
+              />
+              <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/15 bg-[#080808]/95 p-5 md:inset-x-8 md:bottom-8">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/35">Inbound call</p>
+                    <p className="mt-2 text-sm">“Remind the team about tomorrow’s site visit.”</p>
+                  </div>
+                  <span className="rounded-full bg-blue-400/12 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-blue-200">Phone</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="trust" className="border-b border-white/10 bg-[#050505]">
+          <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-24 md:px-8 md:py-32 lg:grid-cols-[0.82fr_1.18fr] xl:px-12">
+            <div>
+              <p className="eyebrow">Trust by architecture</p>
+              <h2 className="section-title max-w-lg">Helpful without being reckless.</h2>
+              <p className="mt-6 max-w-md text-sm leading-6 text-white/45">Security is visible in the product: who asked, what Pandora understood, what changed, who approved it, and what the provider returned.</p>
+            </div>
+            <div className="overflow-hidden rounded-[22px] border border-white/10 bg-[#080808]">
+              {safeguards.map((item, index) => (
+                <div key={item} className={`grid grid-cols-[44px_1fr] gap-4 p-5 md:p-6 ${index > 0 ? 'border-t border-white/10' : ''}`}>
+                  <span className="grid h-9 w-9 place-items-center rounded-full border border-white/12 text-white/70"><Check size={14} /></span>
+                  <p className="self-center text-sm leading-6 text-white/62">{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <PricingSection />
+
+        <section className="bg-[#050505] px-5 py-24 text-center md:px-8 md:py-36">
+          <p className="eyebrow">Pandora Labs</p>
+          <h2 className="mx-auto max-w-4xl text-5xl font-medium leading-[0.96] tracking-[-0.06em] md:text-7xl">Give your business a voice people can reach.</h2>
+          <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-white/45">Start on the web, connect Google Workspace securely, and add phone access when your team is ready.</p>
+          <Link to="/signup" className="mt-9 inline-flex items-center gap-2 rounded-xl bg-white px-7 py-4 text-sm font-semibold text-black transition-transform hover:-translate-y-0.5">
+            Create your free workspace <ArrowRight size={16} />
+          </Link>
+        </section>
+      </main>
+
+      <footer className="border-t border-white/10 bg-[#080808]">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-5 px-5 py-8 md:flex-row md:items-center md:justify-between md:px-8 xl:px-12">
+          <div className="flex items-center gap-3"><PlaceholderLogo size={28} /><span className="text-sm font-medium">Pandora Labs</span></div>
+          <p className="text-xs text-white/32">Cloud-powered voice operations for accessible Nigerian business.</p>
+          <div className="flex gap-5 text-xs text-white/42"><a href="mailto:hello@pandoralabs.ai" className="hover:text-white">Contact</a><Link to="/login" className="hover:text-white">Sign in</Link></div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function ChannelBadge({ label, state, tone }: { label: string; state: string; tone: 'green' | 'blue' | 'neutral' }) {
+  const toneClass = tone === 'green' ? 'text-emerald-300' : tone === 'blue' ? 'text-blue-300' : 'text-white/35';
+  return <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.14em]"><span className={toneClass}>{label}</span><span className="text-white/25">{state}</span></span>;
+}

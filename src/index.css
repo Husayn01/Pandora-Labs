@@ -1,12 +1,6 @@
-/* ============================================
-   Pandora Labs — Global Styles (Tailwind v4)
-   ============================================ */
-
 @import "tailwindcss";
 
-/* ─── Custom Theme (Tailwind v4 @theme) ─── */
 @theme {
-  /* Minimalist monochromatic palette */
   --color-pandora-50: #ffffff;
   --color-pandora-100: #f5f5f5;
   --color-pandora-200: #e5e5e5;
@@ -18,8 +12,6 @@
   --color-pandora-800: #262626;
   --color-pandora-900: #171717;
   --color-pandora-950: #0a0a0a;
-
-  /* Deep space background palette mapped to pure darks */
   --color-void-50: #ffffff;
   --color-void-100: #f5f5f5;
   --color-void-200: #e5e5e5;
@@ -31,8 +23,6 @@
   --color-void-800: #262626;
   --color-void-900: #111111;
   --color-void-950: #050505;
-
-  /* Accents mapped to greyscale */
   --color-neon-50: #fafafa;
   --color-neon-100: #f4f4f5;
   --color-neon-200: #e4e4e7;
@@ -40,107 +30,143 @@
   --color-neon-400: #a1a1aa;
   --color-neon-500: #71717a;
   --color-neon-600: #52525b;
-
   --color-glow-400: #a1a1aa;
   --color-glow-500: #71717a;
-
-  /* Typography */
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-/* ─── Base Styles ─── */
 @layer base {
   :root {
     color-scheme: dark;
   }
 
   * {
+    box-sizing: border-box;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   }
 
-  body {
-    @apply bg-black text-white antialiased font-sans;
-    background-color: #050505;
-    min-height: 100vh;
+  *:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 3px;
   }
 
-  /* Smooth scroll */
   html {
     scroll-behavior: smooth;
+    scroll-padding-top: 5.5rem;
   }
 
-  /* Selection color */
+  body {
+    @apply bg-black text-white antialiased font-sans;
+    min-height: 100vh;
+    background-color: #050505;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   ::selection {
-    background-color: rgba(255, 255, 255, 0.2);
     color: #ffffff;
+    background-color: rgba(147, 197, 253, 0.28);
   }
 }
 
-/* ─── Utility Animations ─── */
 @layer utilities {
   .eyebrow {
-    @apply text-[11px] uppercase tracking-[0.24em] text-gray-500 mb-5;
+    @apply mb-5 text-[11px] uppercase tracking-[0.24em] text-gray-500;
   }
 
   .section-title {
-    @apply text-4xl md:text-6xl font-light tracking-[-0.045em] leading-[1.02];
+    @apply text-4xl font-medium leading-[1.02] tracking-[-0.05em] md:text-6xl;
   }
 
   .section-copy {
-    @apply mt-5 text-sm md:text-base leading-relaxed text-gray-500;
-  }
-  /* Gradient text utility - now white/grey */
-  .text-gradient-pandora {
-    background: linear-gradient(135deg, #ffffff 0%, #a3a3a3 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    @apply mt-5 text-sm leading-relaxed text-gray-500 md:text-base;
   }
 
-  /* Glass card - minimalist dark */
   .glass-card {
-    background: rgba(15, 15, 15, 0.7);
-    backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(15, 15, 15, 0.82);
+    backdrop-filter: blur(20px);
   }
 
   .glass-card-hover:hover {
-    background: rgba(25, 25, 25, 0.8);
     border-color: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+    background: rgba(25, 25, 25, 0.9);
   }
 
-  /* Fade in up animation */
   @keyframes fade-in-up {
-    from { opacity: 0; transform: translateY(30px); }
+    from { opacity: 0; transform: translateY(24px); }
     to { opacity: 1; transform: translateY(0); }
   }
+
   .animate-fade-in-up {
-    animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: fade-in-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
-  /* Typing animation */
   @keyframes typing {
-    from { width: 0 }
-    to { width: 100% }
+    from { width: 0; }
+    to { width: 100%; }
   }
+
   @keyframes blink-caret {
-    from, to { border-color: transparent }
-    50% { border-color: #ffffff }
+    from, to { border-color: transparent; }
+    50% { border-color: #ffffff; }
   }
+
   .animate-typing {
     overflow: hidden;
-    white-space: nowrap;
     border-right: 2px solid #ffffff;
-    animation: typing 2.5s steps(40, end), blink-caret .75s step-end infinite;
+    white-space: nowrap;
+    animation: typing 2.5s steps(40, end), blink-caret 0.75s step-end infinite;
   }
 
-  /* Stagger children animation delays */
   .stagger-1 { animation-delay: 0.1s; }
   .stagger-2 { animation-delay: 0.2s; }
   .stagger-3 { animation-delay: 0.3s; }
   .stagger-4 { animation-delay: 0.4s; }
   .stagger-5 { animation-delay: 0.5s; }
+
+  .problem-visual {
+    display: flex;
+    min-height: 112px;
+    align-items: center;
+    gap: 1rem;
+    border: 1px solid rgba(17, 18, 20, 0.1);
+    border-radius: 0.875rem;
+    padding: 1rem;
+  }
+
+  .problem-visual-blue {
+    color: #1d4ed8;
+    background-color: #eef4ff;
+  }
+
+  .problem-visual-amber {
+    color: #92400e;
+    background-color: #fff8e7;
+  }
+
+  .problem-visual-green {
+    color: #166534;
+    background-color: #edf9f0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
