@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      approval_decisions: {
+        Row: {
+          action_payload_hash: string
+          action_type: string
+          actor_user_id: string
+          approval_idempotency_key: string
+          approval_request_id: string
+          decided_at: string
+          decision: string
+          decision_idempotency_key: string
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          action_payload_hash: string
+          action_type: string
+          actor_user_id: string
+          approval_idempotency_key: string
+          approval_request_id: string
+          decided_at?: string
+          decision: string
+          decision_idempotency_key: string
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          action_payload_hash?: string
+          action_type?: string
+          actor_user_id?: string
+          approval_idempotency_key?: string
+          approval_request_id?: string
+          decided_at?: string
+          decision?: string
+          decision_idempotency_key?: string
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_decisions_approval_request_id_fkey"
+            columns: ["approval_request_id"]
+            isOneToOne: true
+            referencedRelation: "approval_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_decisions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       approval_requests: {
         Row: {
           action_payload_hash: string
@@ -703,28 +757,28 @@ export type Database = {
           features: Json
           monthly_price_minor: number
           plan_code: string
-          seat_limit: number
-          total_voice_seconds_limit: number
-          web_command_limit: number
-          web_voice_seconds_limit: number
+          seat_limit: number | null
+          total_voice_seconds_limit: number | null
+          web_command_limit: number | null
+          web_voice_seconds_limit: number | null
         }
         Insert: {
           features?: Json
           monthly_price_minor: number
           plan_code: string
-          seat_limit: number
-          total_voice_seconds_limit: number
-          web_command_limit: number
-          web_voice_seconds_limit: number
+          seat_limit?: number | null
+          total_voice_seconds_limit?: number | null
+          web_command_limit?: number | null
+          web_voice_seconds_limit?: number | null
         }
         Update: {
           features?: Json
           monthly_price_minor?: number
           plan_code?: string
-          seat_limit?: number
-          total_voice_seconds_limit?: number
-          web_command_limit?: number
-          web_voice_seconds_limit?: number
+          seat_limit?: number | null
+          total_voice_seconds_limit?: number | null
+          web_command_limit?: number | null
+          web_voice_seconds_limit?: number | null
         }
         Relationships: []
       }
@@ -1096,6 +1150,18 @@ export type Database = {
           p_subscription_code: string
         }
         Returns: undefined
+      }
+      decide_approval: {
+        Args: {
+          p_actor_user_id: string
+          p_approval_request_id: string
+          p_decision: string
+          p_decision_idempotency_key: string
+          p_expected_approval_idempotency_key: string
+          p_expected_payload_hash: string
+          p_organization_id: string
+        }
+        Returns: Json
       }
       delete_integration_secret: {
         Args: { secret_id: string }
