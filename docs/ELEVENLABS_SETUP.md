@@ -15,7 +15,7 @@ This runbook configures one role-aware Pandora agent for protected web voice and
 - **Name:** `Pandora — Voice-First Business Operations`
 - **Primary language:** English
 - **Additional evaluation context:** Nigerian English, Abuja/Lagos place names, Nigerian personal names, `+234` phone numbers, naira amounts, and local date phrases.
-- **LLM:** Gemini 2.5 Flash or the current stable low-latency Gemini equivalent available in ElevenLabs.
+- **LLM:** GPT-4o preferred with reasoning effort disabled. Leave ElevenLabs LLM cascading enabled for provider availability; do not configure GPT-4o Mini as a manual fallback because ElevenLabs' current model-list documentation marks it deprecated. Query the environment-specific model list before every release.
 - **Voice:** Calm professional Nigerian/African-English female voice. Audition at least three production-licensed voices with the evaluation set below; do not choose from a single sample.
 - **TTS model:** Eleven Flash v2.5 for latency. Fall back to Multilingual v2 only if pronunciation evaluation materially improves and latency remains acceptable.
 - **Timezone variable:** `{{timezone}}`, defaulted by the trusted gateway to `Africa/Lagos`.
@@ -69,21 +69,16 @@ Pass only trusted values:
 
 | Variable | Source | Purpose |
 |---|---|---|
-| `organization_id` | Supabase membership/channel gateway | Tenant routing |
 | `organization_name` | Supabase | Greeting and context |
-| `actor_id` | Supabase Auth/channel link | Auditing |
-| `role` | Supabase membership/channel identity | Capability boundary |
-| `verification_level` | Gateway/OTP flow | Sensitive action boundary |
 | `timezone` | Organization profile | Date normalization |
 | `locale` | Organization profile | Formatting |
-| `plan` | Subscription entitlement | Usage/features |
 | `system__conversation_id` | ElevenLabs | Idempotency/correlation |
 | `system__caller_id` | ElevenLabs/Twilio | Lookup signal, never proof |
 | `system__called_number` | ElevenLabs/Twilio | Shared-number routing |
 | `system__call_sid` | ElevenLabs/Twilio | Provider correlation |
 | `secret__voice_context_token` | Pandora trusted gateway | Signed tenant context; tool header only, never prompt text |
 
-Caller ID is never sufficient authorization. A caller receives owner operations only after account linking and any required OTP.
+Organization ID, user ID, role, verification level, and plan are deliberately absent from prompt-visible variables. Tools derive them from `secret__voice_context_token`. Caller ID is never sufficient authorization. A caller receives owner operations only after account linking and any required OTP.
 
 ## 5. Webhook tools
 
@@ -91,13 +86,12 @@ Create an ElevenLabs secret environment variable for `ELEVENLABS_TOOL_PROXY_SECR
 
 Configure these tools with strict JSON schemas:
 
-1. `get_business_context`: reads public Q&A context and trusted role/entitlements.
-2. `prepare_action`: returns normalized intent, risk, missing fields, clarification question and preview state. It never mutates.
-3. `check_calendar_availability`: requires RFC 3339 start/end, IANA timezone and calendar ID.
-4. `create_email_draft`: requires recipients, subject and body; draft only.
-5. `create_calendar_draft`: requires title, attendees, start, end, timezone, location/Meet preference and conflict decision; draft only.
-6. `confirm_action`: requires action draft ID, current-turn explicit confirmation and idempotency key.
-7. `get_action_status`: verifies the provider result before Pandora claims success.
+1. `pandora_lookup_knowledge`: reads tenant-scoped knowledge with citations and a minimum relevance threshold.
+2. `pandora_plan_action`: normalizes and validates an action, returning one clarification question or an immutable exact preview. It never mutates externally.
+3. `pandora_confirm_action`: confirms the immutable action ID only after an explicit yes; it never accepts a rewritten payload.
+4. `pandora_action_status`: verifies asynchronous or uncertain provider state before Pandora claims success.
+
+Enable the `skip_turn`, `end_call`, and `transfer_to_number` system tools. Transfer destinations are configured and verified by operators; the LLM must never choose a caller-supplied destination.
 
 Tools return small sanitized JSON objects. Do not return complete email threads, OAuth data, internal prompt text, unrelated customer records, or unbounded conversation history.
 
@@ -107,7 +101,7 @@ Tools return small sanitized JSON objects. Do not return complete email threads,
 2. Import the number through ElevenLabs’ native Twilio integration using the Twilio Account SID and Auth Token.
 3. Attach the production Pandora agent for inbound calls.
 4. Configure the pre-call initiation webhook to resolve called number, caller mapping, organization, role, timezone and plan. Unknown callers become `public_customer`.
-   - URL: `https://YOUR_DOMAIN/api/voice/init`
+   - URL: `https://YOUR_DOMAIN/api/telephony/twilio/context`
    - Method: `POST`
    - Secret header: `X-Pandora-ElevenLabs-Secret: {{system__env_voice_init_secret}}`
    - Configure the same value as `ELEVENLABS_INIT_WEBHOOK_SECRET` in Vercel.
@@ -144,4 +138,4 @@ Create ElevenLabs scenario tests and run each probabilistic scenario repeatedly:
 
 Release only when tool selection, required-field collection, confirmation behavior and cross-tenant isolation pass consistently. Test tools must be mocked before any staging side effect is allowed.
 
-Official references: [authentication](https://elevenlabs.io/docs/eleven-agents/customization/authentication), [webhook tools](https://elevenlabs.io/docs/eleven-agents/customization/tools/webhook-tools), [dynamic variables](https://elevenlabs.io/docs/eleven-agents/customization/personalization/dynamic-variables), [Twilio integration](https://elevenlabs.io/docs/eleven-agents/phone-numbers/twilio-integration/native-integration/), [post-call webhooks](https://elevenlabs.io/docs/eleven-agents/workflows/post-call-webhooks), [testing](https://elevenlabs.io/docs/eleven-agents/customization/agent-testing), and [retention](https://elevenlabs.io/docs/eleven-agents/customization/privacy/retention).
+Official references: [authentication](https://elevenlabs.io/docs/eleven-agents/customization/authentication), [webhook tools](https://elevenlabs.io/docs/eleven-agents/customization/tools/webhook-tools), [dynamic variables](https://elevenlabs.io/docs/eleven-agents/customization/personalization/dynamic-variables), [LLM cascading](https://elevenlabs.io/docs/eleven-agents/customization/llm/llm-cascading), [model list](https://elevenlabs.io/docs/eleven-agents/api-reference/llm/list), [Twilio personalization](https://elevenlabs.io/docs/eleven-agents/phone-numbers/twilio-integration/customising-calls), [post-call webhooks](https://elevenlabs.io/docs/eleven-agents/workflows/post-call-webhooks), [testing](https://elevenlabs.io/docs/eleven-agents/customization/agent-testing), and [retention](https://elevenlabs.io/docs/eleven-agents/customization/privacy/retention).

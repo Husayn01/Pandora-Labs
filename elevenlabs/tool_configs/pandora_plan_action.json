@@ -1,0 +1,23 @@
+{
+  "type": "webhook",
+  "name": "pandora_plan_action",
+  "description": "Normalize and validate a requested business action. Call before asking for confirmation. Returns one missing-field question or an immutable exact preview. This tool never performs the external action.",
+  "method": "POST",
+  "url": "${PANDORA_BASE_URL}/api/voice/action",
+  "timeout_seconds": 8,
+  "headers": {
+    "X-Pandora-Voice-Context": "{{secret__voice_context_token}}",
+    "X-Pandora-ElevenLabs-Secret": "${AUTH_CONNECTION_SECRET}"
+  },
+  "body_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["tool", "intent", "entities"],
+    "properties": {
+      "tool": { "const": "plan_action" },
+      "intent": { "type": "string", "enum": ["email.send", "email.reply", "email.search", "email.trash", "calendar.list", "calendar.create", "calendar.update", "calendar.cancel", "task.create", "reminder.create", "invoice.draft", "report.draft"] },
+      "entities": { "type": "object", "description": "Only facts explicitly supplied by the speaker. Never include an organization, role, plan, user ID, URL, authorization header, token, or secret." },
+      "utterance": { "type": "string", "maxLength": 2000 }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "name": "Pandora Voice Operations",
+  "tags": ["pandora", "voice-first", "staging-template"],
+  "conversation_config": {
+    "agent": {
+      "first_message": "Hello, you are speaking with Pandora. I am an AI assistant. How can I help today?",
+      "language": "en",
+      "prompt": {
+        "prompt_file": "./PANDORA_SYSTEM_PROMPT.md",
+        "llm": "gpt-4o",
+        "temperature": 0.1,
+        "reasoning_effort": "none",
+        "tool_ids": [
+          "${PANDORA_LOOKUP_KNOWLEDGE_TOOL_ID}",
+          "${PANDORA_PLAN_ACTION_TOOL_ID}",
+          "${PANDORA_CONFIRM_ACTION_TOOL_ID}",
+          "${PANDORA_ACTION_STATUS_TOOL_ID}"
+        ]
+      }
+    },
+    "asr": {
+      "provider": "scribe_realtime",
+      "quality": "high",
+      "user_input_audio_format": "pcm_16000"
+    },
+    "tts": {
+      "model_id": "eleven_flash_v2_5",
+      "voice_id": "${PANDORA_VOICE_ID}",
+      "speed": 1,
+      "agent_output_audio_format": "pcm_16000"
+    },
+    "conversation": {
+      "text_only": false,
+      "max_duration_seconds": 1800,
+      "client_events": ["audio", "interruption"],
+      "turn_timeout_seconds": 10,
+      "soft_timeout_seconds": 3,
+      "soft_timeout_message": "Let me check that."
+    }
+  },
+  "platform_settings": {
+    "auth": {
+      "enable_auth": true
+    },
+    "privacy": {
+      "record_voice": false,
+      "retention_days": 30
+    },
+    "data_collection": [
+      { "identifier": "intent", "data_type": "string", "description": "The primary business intent, or null when unclear." },
+      { "identifier": "outcome", "data_type": "string", "description": "The final verified outcome without secrets or full message bodies." },
+      { "identifier": "action_id", "data_type": "string", "description": "The Pandora action ID returned by a trusted tool, or null." },
+      { "identifier": "escalation_reason", "data_type": "string", "description": "The safe handoff or refusal reason, or null." },
+      { "identifier": "clarification_count", "data_type": "integer", "description": "Number of clarification questions asked." },
+      { "identifier": "success", "data_type": "boolean", "description": "True only when a trusted status tool verified success." }
+    ]
+  }
+}

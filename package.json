@@ -11,9 +11,10 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:migrations": "node scripts/check-migrations.mjs",
+    "test:elevenlabs": "node scripts/check-elevenlabs-config.mjs",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run test:migrations && npm run build"
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run test:migrations && npm run test:elevenlabs && npm run build"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

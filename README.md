@@ -28,6 +28,12 @@ Pandora uses one shared n8n workflow suite. Customer OAuth tokens never enter n8
 - [n8n multi-tenancy](docs/N8N_MULTI_TENANCY.md)
 - [Production setup and release gates](docs/PRODUCTION_SETUP.md)
 - [Pricing and unit economics](docs/PRICING_AND_UNIT_ECONOMICS.md)
+- [Threat model](docs/THREAT_MODEL.md)
+- [Operations runbook](docs/OPERATIONS_RUNBOOK.md)
+- [Incident response](docs/INCIDENT_RESPONSE.md)
+- [Backup and restoration](docs/BACKUP_RESTORE.md)
+- [Rollback procedure](docs/ROLLBACK.md)
+- [Versioned ElevenLabs configuration](elevenlabs/README.md)
 - [n8n workflow build sequence](n8n/README.md)
 - [Project lifecycle rules](AGENTS.md)
 
