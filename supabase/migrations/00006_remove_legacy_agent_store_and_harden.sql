@@ -13,6 +13,12 @@ drop policy if exists "Users can upload their own knowledge files" on storage.ob
 drop policy if exists "Users can update their own knowledge files" on storage.objects;
 drop policy if exists "Users can read their own knowledge files" on storage.objects;
 drop policy if exists "Users can delete their own knowledge files" on storage.objects;
+-- 00001 used "knowledge storage objects" in the deployed policy names. Keep
+-- both spellings so fresh resets and older projects converge safely.
+drop policy if exists "Users can upload their own knowledge storage objects" on storage.objects;
+drop policy if exists "Users can update their own knowledge storage objects" on storage.objects;
+drop policy if exists "Users can read their own knowledge storage objects" on storage.objects;
+drop policy if exists "Users can delete their own knowledge storage objects" on storage.objects;
 -- The empty legacy bucket is intentionally left in place because Supabase protects
 -- bucket deletion at SQL level. Remove it through the Storage API during rollout.
 

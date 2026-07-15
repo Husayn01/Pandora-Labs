@@ -18,6 +18,12 @@ create table if not exists public.profiles (
     updated_at timestamptz not null default now()
 );
 
+-- `profiles` already exists when this migration follows the legacy ops
+-- baseline. CREATE TABLE IF NOT EXISTS does not merge missing columns, so the
+-- transition must be explicit for a clean database replay.
+alter table public.profiles
+  add column if not exists onboarding_completed_at timestamptz;
+
 create table if not exists public.organizations (
     id uuid primary key default gen_random_uuid(),
     name text not null,
@@ -85,6 +91,22 @@ create table if not exists public.channel_identities (
     constraint channel_identities_role_check check (role in ('public_customer','owner','admin','member'))
 );
 
+alter table public.channel_identities
+  add column if not exists organization_id uuid references public.organizations(id) on delete cascade,
+  add column if not exists external_id_hash text,
+  add column if not exists display_hint text,
+  add column if not exists role text not null default 'public_customer',
+  add column if not exists verified_at timestamptz;
+
+alter table public.channel_identities
+  drop constraint if exists channel_identities_channel_check,
+  drop constraint if exists channel_identities_role_check;
+alter table public.channel_identities
+  add constraint channel_identities_channel_check
+    check (channel in ('web','phone','sms','telegram','whatsapp','ussd','elevenlabs')),
+  add constraint channel_identities_role_check
+    check (role in ('public_customer','owner','admin','member'));
+
 create table if not exists public.channel_link_tokens (
     id uuid primary key default gen_random_uuid(),
     organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -128,6 +150,13 @@ create table if not exists public.tasks (
     unique (organization_id, idempotency_key)
 );
 
+alter table public.tasks
+  add column if not exists organization_id uuid references public.organizations(id) on delete cascade,
+  add column if not exists created_by uuid references auth.users(id) on delete set null,
+  add column if not exists assignee_id uuid references auth.users(id) on delete set null,
+  add column if not exists idempotency_key text,
+  add column if not exists metadata jsonb not null default '{}'::jsonb;
+
 create table if not exists public.reminders (
     id uuid primary key default gen_random_uuid(),
     organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -146,6 +175,22 @@ create table if not exists public.reminders (
     constraint reminders_delivery_check check (delivery_channel in ('web','email','sms','phone','telegram','whatsapp')),
     unique (organization_id, idempotency_key)
 );
+
+alter table public.reminders
+  add column if not exists organization_id uuid references public.organizations(id) on delete cascade,
+  add column if not exists created_by uuid references auth.users(id) on delete set null,
+  add column if not exists idempotency_key text,
+  add column if not exists metadata jsonb not null default '{}'::jsonb;
+
+alter table public.reminders
+  drop constraint if exists reminders_status_check,
+  drop constraint if exists reminders_delivery_channel_check,
+  drop constraint if exists reminders_delivery_check;
+alter table public.reminders
+  add constraint reminders_status_check
+    check (status in ('scheduled','processing','sent','cancelled','failed')),
+  add constraint reminders_delivery_check
+    check (delivery_channel in ('web','email','sms','phone','telegram','whatsapp'));
 
 create table if not exists public.approval_requests (
     id uuid primary key default gen_random_uuid(),
@@ -184,6 +229,13 @@ create table if not exists public.workflow_events (
     constraint workflow_events_status_check check (status in ('info','success','warning','error')),
     unique (organization_id, idempotency_key)
 );
+
+alter table public.workflow_events
+  add column if not exists organization_id uuid references public.organizations(id) on delete cascade,
+  add column if not exists actor_user_id uuid references auth.users(id) on delete set null,
+  add column if not exists correlation_id text,
+  add column if not exists redacted_payload jsonb not null default '{}'::jsonb,
+  add column if not exists idempotency_key text;
 
 create table if not exists public.knowledge_sources (
     id uuid primary key default gen_random_uuid(),
@@ -303,10 +355,39 @@ create table if not exists public.usage_counters (
 -- Backfill one isolated organization per existing user without losing data.
 -- ---------------------------------------------------------------------------
 
+-- Remove the legacy user-scoped policies before dropping legacy ownership
+-- columns. The tenant-scoped replacements are created later in this migration.
+do $$
+declare
+  p record;
+begin
+  for p in
+    select policyname, tablename
+    from pg_policies
+    where schemaname = 'public'
+      and tablename in (
+        'profiles',
+        'channel_identities',
+        'conversations',
+        'messages',
+        'tasks',
+        'reminders',
+        'workflow_events'
+      )
+  loop
+    execute format('drop policy if exists %I on public.%I', p.policyname, p.tablename);
+  end loop;
+end
+$$;
+
 insert into public.profiles (user_id, display_name)
 select id, nullif(raw_user_meta_data ->> 'full_name', '')
 from auth.users
 on conflict (user_id) do nothing;
+
+alter table public.profiles
+  drop column if exists default_calendar_id,
+  drop column if exists approval_channel;
 
 insert into public.organizations (name, slug, owner_user_id, timezone)
 select
@@ -322,6 +403,99 @@ select o.id, o.owner_user_id, 'owner', 'active'
 from public.organizations o
 on conflict (organization_id, user_id) do nothing;
 
+-- Legacy channel identities were user-owned and stored a plaintext external
+-- identifier. A reset database should normally have no rows here. For a
+-- legacy replay, bind each row to the user's isolated workspace, preserve only
+-- a short display hint, and replace the plaintext value with a deterministic
+-- one-way transition hash. Production identifiers must subsequently be linked
+-- through the trusted gateway using CHANNEL_IDENTITY_PEPPER.
+update public.channel_identities ci
+set organization_id = o.id,
+    external_id_hash = coalesce(
+      ci.external_id_hash,
+      pg_catalog.encode(
+        extensions.digest(
+          pg_catalog.convert_to(o.id::text || ':' || ci.channel || ':' || ci.external_id, 'UTF8'),
+          'sha256'
+        ),
+        'hex'
+      )
+    ),
+    display_hint = coalesce(ci.display_hint, right(ci.external_id, 4)),
+    role = coalesce(m.role, 'member'),
+    verified_at = coalesce(ci.verified_at, ci.created_at)
+from public.organizations o
+join public.organization_members m
+  on m.organization_id = o.id
+ and m.user_id = o.owner_user_id
+where ci.user_id = o.owner_user_id
+  and ci.organization_id is null;
+
+alter table public.channel_identities
+  alter column organization_id set not null,
+  alter column external_id_hash set not null;
+alter table public.channel_identities
+  drop column if exists external_id,
+  drop column if exists is_primary;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'channel_identities_channel_external_hash_key'
+      and conrelid = 'public.channel_identities'::regclass
+  ) then
+    alter table public.channel_identities
+      add constraint channel_identities_channel_external_hash_key
+      unique (channel, external_id_hash);
+  end if;
+end
+$$;
+
+update public.tasks t
+set organization_id = o.id,
+    created_by = coalesce(t.created_by, t.user_id),
+    metadata = coalesce(t.metadata, '{}'::jsonb) || coalesce(t.external_ref, '{}'::jsonb)
+from public.organizations o
+where t.user_id = o.owner_user_id
+  and t.organization_id is null;
+
+alter table public.tasks alter column organization_id set not null;
+alter table public.tasks
+  drop column if exists user_id,
+  drop column if exists external_ref;
+
+update public.reminders r
+set organization_id = o.id,
+    created_by = coalesce(r.created_by, r.user_id),
+    metadata = coalesce(r.metadata, '{}'::jsonb) || coalesce(r.external_ref, '{}'::jsonb)
+from public.organizations o
+where r.user_id = o.owner_user_id
+  and r.organization_id is null;
+
+alter table public.reminders alter column organization_id set not null;
+alter table public.reminders
+  drop column if exists user_id,
+  drop column if exists source_channel,
+  drop column if exists external_ref;
+
+update public.workflow_events e
+set organization_id = o.id,
+    actor_user_id = coalesce(e.actor_user_id, e.user_id),
+    correlation_id = coalesce(e.correlation_id, gen_random_uuid()::text),
+    redacted_payload = jsonb_build_object('legacy_event', true)
+from public.organizations o
+where e.user_id = o.owner_user_id
+  and e.organization_id is null;
+
+alter table public.workflow_events
+  alter column organization_id set not null,
+  alter column correlation_id set not null;
+alter table public.workflow_events
+  drop column if exists user_id,
+  drop column if exists payload;
+
 update public.conversations c
 set organization_id = o.id,
     actor_user_id = c.user_id
@@ -329,6 +503,42 @@ from public.organizations o
 where c.organization_id is null and o.owner_user_id = c.user_id;
 
 alter table public.conversations alter column organization_id set not null;
+
+-- Recreate the idempotency constraints skipped when the legacy tables already
+-- existed. PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS syntax.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'tasks_organization_id_idempotency_key_key'
+      and conrelid = 'public.tasks'::regclass
+  ) then
+    alter table public.tasks
+      add constraint tasks_organization_id_idempotency_key_key
+      unique (organization_id, idempotency_key);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'reminders_organization_id_idempotency_key_key'
+      and conrelid = 'public.reminders'::regclass
+  ) then
+    alter table public.reminders
+      add constraint reminders_organization_id_idempotency_key_key
+      unique (organization_id, idempotency_key);
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'workflow_events_organization_id_idempotency_key_key'
+      and conrelid = 'public.workflow_events'::regclass
+  ) then
+    alter table public.workflow_events
+      add constraint workflow_events_organization_id_idempotency_key_key
+      unique (organization_id, idempotency_key);
+  end if;
+end
+$$;
 
 insert into public.subscriptions (organization_id, plan_code, status)
 select id, plan_code, 'active' from public.organizations
@@ -409,6 +619,10 @@ end;
 $$;
 
 revoke all on function private.provision_pandora_user() from public, anon, authenticated;
+drop trigger if exists on_auth_user_created_install_default_agents on auth.users;
+drop trigger if exists on_auth_user_created_profile on auth.users;
+drop function if exists private.auto_install_default_agents();
+drop function if exists private.auto_create_profile();
 drop trigger if exists on_auth_user_created_pandora on auth.users;
 create trigger on_auth_user_created_pandora
 after insert on auth.users
@@ -514,7 +728,6 @@ create policy tasks_admin_delete on public.tasks for delete to authenticated usi
 create policy reminders_member_select on public.reminders for select to authenticated using ((select private.is_org_member(organization_id)));
 create policy reminders_member_write on public.reminders for all to authenticated using ((select private.is_org_member(organization_id))) with check ((select private.is_org_member(organization_id)));
 create policy approvals_member_select on public.approval_requests for select to authenticated using ((select private.is_org_member(organization_id)));
-create policy approvals_decider_update on public.approval_requests for update to authenticated using ((select private.has_org_role(organization_id, array['owner','admin']))) with check ((select private.has_org_role(organization_id, array['owner','admin'])));
 create policy workflow_events_member_select on public.workflow_events for select to authenticated using ((select private.is_org_member(organization_id)));
 create policy knowledge_member_select on public.knowledge_sources for select to authenticated using ((select private.is_org_member(organization_id)));
 create policy knowledge_admin_write on public.knowledge_sources for all to authenticated using ((select private.has_org_role(organization_id, array['owner','admin']))) with check ((select private.has_org_role(organization_id, array['owner','admin'])));
@@ -529,6 +742,14 @@ create policy counters_member_select on public.usage_counters for select to auth
 
 -- Browser grants are narrow; server automation uses service_role through trusted boundaries.
 grant usage on schema public to authenticated;
+revoke all on table public.profiles from anon, authenticated;
+revoke all on table public.channel_identities from anon, authenticated;
+revoke all on table public.conversations from anon, authenticated;
+revoke all on table public.messages from anon, authenticated;
+revoke all on table public.tasks from anon, authenticated;
+revoke all on table public.reminders from anon, authenticated;
+revoke all on table public.workflow_events from anon, authenticated;
+revoke all on table public.approval_requests from anon, authenticated;
 grant select, update on public.profiles to authenticated;
 grant select, update on public.organizations to authenticated;
 grant select, insert, update, delete on public.organization_members to authenticated;
@@ -539,7 +760,7 @@ grant select, insert, update, delete on public.conversations to authenticated;
 grant select, insert on public.messages to authenticated;
 grant select, insert, update, delete on public.tasks to authenticated;
 grant select, insert, update, delete on public.reminders to authenticated;
-grant select, update on public.approval_requests to authenticated;
+grant select on public.approval_requests to authenticated;
 grant select on public.workflow_events to authenticated;
 grant select, insert, update, delete on public.knowledge_sources to authenticated;
 grant select, insert, update, delete on public.invoices to authenticated;
