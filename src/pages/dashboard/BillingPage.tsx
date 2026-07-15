@@ -12,6 +12,7 @@ import {
 } from '@/components/dashboard/DashboardPrimitives';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { requestJson } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import { launchPlanCatalog, type PublicPlan } from '@/lib/plan-catalog';
 
@@ -33,7 +34,7 @@ export default function BillingPage() {
     setError('');
     const periodKey = new Date().toISOString().slice(0, 7);
     const [planResponse, usageResult, subscriptionResult] = await Promise.all([
-      fetch('/api/plans').then(async (response) => response.ok ? response.json() as Promise<{ plans?: PublicPlan[] }> : {} as { plans?: PublicPlan[] }).catch(() => ({} as { plans?: PublicPlan[] })),
+      requestJson<{ plans?: PublicPlan[] }>('/api/plans').catch(() => ({} as { plans?: PublicPlan[] })),
       supabase.from('usage_counters').select('metric,quantity').eq('organization_id', organization.id).eq('period_key', periodKey),
       supabase.from('subscriptions').select('plan_code,status,current_period_end,cancel_at_period_end,provider_subscription_code').eq('organization_id', organization.id).maybeSingle(),
     ]);
@@ -52,13 +53,12 @@ export default function BillingPage() {
     setError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/billing/initialize', {
+      const data = await requestJson<{ authorizationUrl?: string }>('/api/billing/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify({ planCode, organizationId: organization.id }),
       });
-      const data = await response.json() as { authorizationUrl?: string; error?: string };
-      if (!response.ok || !data.authorizationUrl) throw new Error(data.error || 'Checkout could not be started.');
+      if (!data.authorizationUrl) throw new Error('Checkout could not be started.');
       window.location.assign(data.authorizationUrl);
     } catch (checkoutError) {
       setError(checkoutError instanceof Error ? checkoutError.message : 'Checkout could not be started.');

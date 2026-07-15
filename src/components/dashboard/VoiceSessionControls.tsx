@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConversationProvider, useConversation } from '@elevenlabs/react';
 import { Loader2, Mic, MicOff, PhoneOff } from 'lucide-react';
+import { requestJson } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import type { Organization } from '@/types/platform';
 
@@ -48,19 +49,15 @@ function VoiceControls({ organization, userId, autoStart, onStateChange }: Props
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Your session has expired. Sign in again.');
 
-      const response = await fetch(
-        `/api/voice/signed-url?organizationId=${encodeURIComponent(organization.id)}`,
-        { headers: { Authorization: `Bearer ${session.access_token}` } },
-      );
-      const data = await response.json() as {
+      const data = await requestJson<{
         signedUrl?: string;
         contextToken?: string;
         role?: string;
-        error?: string;
-      };
-      if (!response.ok || !data.signedUrl) {
-        throw new Error(data.error || 'Voice is not configured.');
-      }
+      }>(
+        `/api/voice/signed-url?organizationId=${encodeURIComponent(organization.id)}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } },
+      );
+      if (!data.signedUrl) throw new Error('Voice is not configured.');
 
       await voice.startSession({
         signedUrl: data.signedUrl,

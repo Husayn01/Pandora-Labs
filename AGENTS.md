@@ -38,6 +38,7 @@
 - Validate before create/update, fetch details after every save to verify connections, test with pinned inputs, then publish only after credentials and side-effect tests pass.
 - Never run a test that can send, write, bill, or call without pinning or explicit staging authorization.
 - Store versioned workflow exports and test fixtures under `n8n/`; production editor access is restricted and MFA-protected.
+- n8n calls `/api/internal/orchestration` for allowlisted durable Supabase operations and the fixed connector broker only for allowlisted provider operations. It must never construct an endpoint from tenant or model input.
 
 ## Database And Retention
 - All exposed tables require RLS. Authorization must not use editable `user_metadata`.
@@ -50,3 +51,4 @@
 - Maintain separate staging and production Supabase, n8n, ElevenLabs, Twilio, Google OAuth, and Paystack configuration.
 - Do not claim production readiness while credentials, provider verification, n8n licensing, a Nigerian number strategy, backups, monitoring, or incident response remain unverified.
 - Expand documentation whenever an invariant, public contract, provider setup, or operational procedure changes.
+- Keep the reviewed shared-agent prompt, four webhook-tool schemas, voice scorecard, and probabilistic evaluation suite under `elevenlabs/`. Query the environment model list and diff the live agent export before every release.

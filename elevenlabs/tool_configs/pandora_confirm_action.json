@@ -1,0 +1,22 @@
+{
+  "type": "webhook",
+  "name": "pandora_confirm_action",
+  "description": "Confirm the exact immutable preview after the speaker gives an unambiguous yes in the current turn. Send only the action ID; never reconstruct or modify its payload.",
+  "method": "POST",
+  "url": "${PANDORA_BASE_URL}/api/voice/action",
+  "timeout_seconds": 8,
+  "headers": {
+    "X-Pandora-Voice-Context": "{{secret__voice_context_token}}",
+    "X-Pandora-ElevenLabs-Secret": "${AUTH_CONNECTION_SECRET}"
+  },
+  "body_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["tool", "actionId", "confirmation"],
+    "properties": {
+      "tool": { "const": "confirm_action" },
+      "actionId": { "type": "string", "format": "uuid" },
+      "confirmation": { "const": true, "description": "True only after an explicit yes in the current conversational turn." }
+    }
+  }
+}

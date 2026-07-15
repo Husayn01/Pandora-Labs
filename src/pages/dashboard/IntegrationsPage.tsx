@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
 import { useWorkspace } from '@/hooks/useWorkspace';
+import { requestJson } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 
 type Connection = {
@@ -82,21 +83,21 @@ export default function IntegrationsPage() {
     if (!organization || !canManage) return;
     setConnecting(true);
     setError('');
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Your session has expired. Sign in again.');
+      const data = await requestJson<{ authorizationUrl?: string }>('/api/connectors/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ organizationId: organization.id }),
+      });
+      if (!data.authorizationUrl) throw new Error('Google connection could not be started.');
+      window.location.assign(data.authorizationUrl);
+    } catch (connectionError) {
+      setError(connectionError instanceof Error ? connectionError.message : 'Google connection could not be started.');
+    } finally {
       setConnecting(false);
-      setError('Your session has expired. Sign in again.');
-      return;
     }
-    const response = await fetch('/api/connectors/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ organizationId: organization.id }),
-    });
-    const data = await response.json() as { authorizationUrl?: string; error?: string };
-    setConnecting(false);
-    if (response.ok && data.authorizationUrl) window.location.assign(data.authorizationUrl);
-    else setError(data.error || 'Google connection could not be started.');
   };
 
   const linkPhone = async (action: 'start' | 'verify' | 'unlink') => {
@@ -104,35 +105,33 @@ export default function IntegrationsPage() {
     setPhoneBusy(true);
     setError('');
     setNotice('');
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Your session has expired. Sign in again.');
+      const data = await requestJson<{ unlinked?: boolean; verified?: boolean; displayHint?: string; linkRequestId?: string }>('/api/channels/phone-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action, organizationId: organization.id, ...(action !== 'unlink' ? { phone } : {}), ...(action === 'verify' ? { code, linkRequestId } : {}) }),
+      });
+      if (data.unlinked) {
+        setPhoneIdentity(null);
+        setNotice('Calling number unlinked. Calls now have public-only access until another number is verified.');
+      } else if (data.verified) {
+        setPhoneIdentity({ display_hint: data.displayHint ?? null, verified_at: new Date().toISOString() });
+        setNotice('Phone verified. Pandora can now identify this number when you call.');
+        setLinkRequestId('');
+        setCode('');
+        setPhone('');
+      } else if (data.linkRequestId) {
+        setLinkRequestId(data.linkRequestId);
+        setNotice(`A verification code was sent to ${data.displayHint}.`);
+      } else {
+        throw new Error('Phone verification returned an incomplete response.');
+      }
+    } catch (phoneError) {
+      setError(phoneError instanceof Error ? phoneError.message : 'Phone verification failed.');
+    } finally {
       setPhoneBusy(false);
-      setError('Your session has expired. Sign in again.');
-      return;
-    }
-    const response = await fetch('/api/channels/phone-link', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ action, organizationId: organization.id, ...(action !== 'unlink' ? { phone } : {}), ...(action === 'verify' ? { code, linkRequestId } : {}) }),
-    });
-    const data = await response.json() as { error?: string; unlinked?: boolean; verified?: boolean; displayHint?: string; linkRequestId?: string };
-    setPhoneBusy(false);
-    if (!response.ok) {
-      setError(data.error || 'Phone verification failed.');
-      return;
-    }
-    if (data.unlinked) {
-      setPhoneIdentity(null);
-      setNotice('Calling number unlinked. Calls now have public-only access until another number is verified.');
-    } else if (data.verified) {
-      setPhoneIdentity({ display_hint: data.displayHint ?? null, verified_at: new Date().toISOString() });
-      setNotice('Phone verified. Pandora can now identify this number when you call.');
-      setLinkRequestId('');
-      setCode('');
-      setPhone('');
-    } else if (data.linkRequestId) {
-      setLinkRequestId(data.linkRequestId);
-      setNotice(`A verification code was sent to ${data.displayHint}.`);
     }
   };
 
