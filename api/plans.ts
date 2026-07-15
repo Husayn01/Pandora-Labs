@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '../server/vercel-types';
-import { createSupabaseAdminClient, sendError, setCorsHeaders } from '../server/api-utils';
+import { createSupabaseAdminClient, setCorsHeaders } from '../server/api-utils';
 import { launchPlanCatalog, type PublicPlan } from '../src/lib/plan-catalog';
 
 type EntitlementRow = {
@@ -43,6 +43,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
     return res.status(200).json({ plans: plans.length === 4 ? plans : launchPlanCatalog });
   } catch (error) {
-    return sendError(res, error);
+    console.warn('[api/plans] live entitlement catalog unavailable; serving versioned fallback', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
+    res.setHeader('X-Pandora-Data-State', 'fallback');
+    return res.status(200).json({ plans: launchPlanCatalog, degraded: true });
   }
 }

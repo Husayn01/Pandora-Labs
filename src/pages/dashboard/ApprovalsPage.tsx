@@ -12,6 +12,7 @@ import {
 import { useWorkspace } from '@/hooks/useWorkspace';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useRealtimeRefresh } from '@/hooks/useRealtimeRefresh';
+import { requestJson } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import type { ApprovalRequest } from '@/types/platform';
 
@@ -59,13 +60,11 @@ export default function ApprovalsPage() {
     setError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`/api/approvals/${item.id}/decision`, {
+      await requestJson<{ ok: boolean }>(`/api/approvals/${item.id}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, 'Idempotency-Key': decisionKey },
         body: JSON.stringify({ organizationId: organization.id, decision, expectedPayloadHash: item.action_payload_hash, expectedApprovalIdempotencyKey: item.idempotency_key }),
       });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || 'Approval could not be decided.');
       await load();
     } catch (decisionError) {
       setError(decisionError instanceof Error ? decisionError.message : 'Approval decision state is uncertain. Refresh before trying again.');

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check } from 'lucide-react';
+import { requestJson } from '@/lib/api-client';
 import { launchPlanCatalog, type PublicPlan } from '@/lib/plan-catalog';
 
 export function PricingSection() {
@@ -8,10 +9,8 @@ export function PricingSection() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch('/api/plans', { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) return;
-        const data = await response.json() as { plans?: PublicPlan[] };
+    void requestJson<{ plans?: PublicPlan[] }>('/api/plans', { signal: controller.signal })
+      .then((data) => {
         if (Array.isArray(data.plans) && data.plans.length === 4) setPlans(data.plans);
       })
       .catch(() => undefined);

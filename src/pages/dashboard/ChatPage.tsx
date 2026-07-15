@@ -4,6 +4,7 @@ import { StatePill, StatusBanner } from '@/components/dashboard/DashboardPrimiti
 import { useAuth } from '@/contexts/AuthContext';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useWorkspace } from '@/hooks/useWorkspace';
+import { requestJson } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 
 const VoiceSessionControls = lazy(() => import('@/components/dashboard/VoiceSessionControls'));
@@ -83,7 +84,7 @@ export default function ChatPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Your session has expired. Sign in again.');
-      const response = await fetch('/api/chat', {
+      const data = await requestJson<{ conversationId?: string; reply?: string }>('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,10 +93,7 @@ export default function ChatPage() {
         },
         body: JSON.stringify({ message: clean, conversationId, organizationId: organization.id }),
       });
-      const data = await response.json() as { conversationId?: string; reply?: string; error?: string };
-      if (!response.ok || !data.conversationId || !data.reply) {
-        throw new Error(data.error || 'Pandora could not complete the request.');
-      }
+      if (!data.conversationId || !data.reply) throw new Error('Pandora returned an incomplete response.');
       setConversationId(data.conversationId);
       setMessages((current) => [...current, { id: crypto.randomUUID(), sender_type: 'agent', content: data.reply!, created_at: new Date().toISOString() }]);
       void loadConversations();
